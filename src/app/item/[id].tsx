@@ -28,7 +28,7 @@ export default function ConfirmRequest() {
   const hasLive = state.requests.some((r) => LIVE_STATUSES.includes(r.status));
 
   return (
-    <ScrollView style={{ backgroundColor: colors.bg }} contentContainerStyle={{ padding: space.xl, paddingBottom: insets.bottom + space.xl }}>
+    <ScrollView style={{ backgroundColor: colors.bg }} contentContainerStyle={{ padding: space.xl, paddingBottom: insets.bottom + space.xl }} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">
       <ItemPhoto item={item} height={200} radius={radius.lg} />
       <View style={{ marginTop: space.lg, gap: 4 }}>
         <Txt variant="title">{item.name}</Txt>
