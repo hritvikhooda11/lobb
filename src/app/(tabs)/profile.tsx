@@ -9,9 +9,9 @@ import { space, useTheme } from '@/theme';
 export default function Profile() {
   const { colors } = useTheme();
   const { state, actions } = useStore();
-  const user = state.user!;
+  const user = state.profile!;
   const community = communities.find((c) => c.id === user.communityId);
-  const delivered = state.jobs.filter((j) => j.status === 'delivered').length + state.wallet.length;
+  const delivered = state.wallet.length;
 
   return (
     <Screen>
@@ -29,14 +29,14 @@ export default function Profile() {
       </View>
 
       <Row style={{ marginTop: space.xl }} gap={space.md}>
-        <Stat label="Rating" value="★ 4.9" />
-        <Stat label="Reliability" value="98%" />
+        <Stat label="Rating" value={`★ ${user.rating.toFixed(1)}`} />
+        <Stat label="Reliability" value={`${user.reliability}%`} />
         <Stat label="Deliveries" value={String(delivered)} />
       </Row>
 
       <SectionHeader title="Settings" />
       <Card>
-        <SettingRow label="Email" value={user.email} />
+        <SettingRow label="Email" value={state.email ?? ''} />
         <Divider />
         <SettingRow label="Payment method" value="Add card" />
         <Divider />

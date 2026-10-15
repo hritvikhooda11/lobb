@@ -9,11 +9,49 @@ import { radius, space, useTheme } from '@/theme';
 
 const PRODUCT_BARCODES = ['ean13', 'ean8', 'upc_a', 'upc_e'] as const;
 
+type Mode = 'product' | 'handoff';
+
+const MODES = {
+  product: {
+    title: 'Scan barcode',
+    types: [...PRODUCT_BARCODES],
+    hint: 'Line up the barcode inside the box',
+    typeHint: 'Type the numbers printed under the barcode instead.',
+    placeholder: 'e.g. 028400589895',
+    clean: (t: string) => t.replace(/\D/g, '').slice(0, 14),
+    valid: (t: string) => t.length >= 8,
+    box: { width: 280, height: 160 },
+  },
+  handoff: {
+    title: 'Scan their QR code',
+    types: ['qr' as const],
+    hint: 'Point at the QR code on their phone',
+    typeHint: 'Type the 6-letter code shown under their QR code instead.',
+    placeholder: 'e.g. K7Q2PX',
+    clean: (t: string) => t.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6),
+    valid: (t: string) => t.length === 6,
+    box: { width: 240, height: 240 },
+  },
+};
+
 /**
- * Full-screen barcode scanner. Uses the camera on real devices; on the Simulator, web,
- * or without camera permission it falls back to typing the number under the barcode.
+ * Full-screen scanner for product barcodes or handoff QR codes. Uses the camera on real
+ * devices; on the Simulator, web, or without camera permission it falls back to typing.
  */
-export function BarcodeScanner({ visible, busy, onScanned, onClose }: { visible: boolean; busy: boolean; onScanned: (code: string) => void; onClose: () => void }) {
+export function BarcodeScanner({
+  visible,
+  busy,
+  onScanned,
+  onClose,
+  mode = 'product',
+}: {
+  visible: boolean;
+  busy: boolean;
+  onScanned: (code: string) => void;
+  onClose: () => void;
+  mode?: Mode;
+}) {
+  const config = MODES[mode];
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const [permission, requestPermission] = useCameraPermissions();
@@ -41,16 +79,16 @@ export function BarcodeScanner({ visible, busy, onScanned, onClose }: { visible:
   const useCamera = cameraAvailable && permission?.granted;
 
   const handleScan = ({ data }: BarcodeScanningResult) => {
-    const code = data.replace(/\D/g, '');
-    if (busy || code.length < 8 || lastScan.current === code) return;
+    const code = config.clean(data);
+    if (busy || !config.valid(code) || lastScan.current === code) return;
     lastScan.current = code;
     tap('success');
     onScanned(code);
   };
 
   const submitTyped = () => {
-    const code = typed.replace(/\D/g, '');
-    if (code.length >= 8) onScanned(code);
+    const code = config.clean(typed);
+    if (config.valid(code)) onScanned(code);
   };
 
   return (
@@ -60,14 +98,14 @@ export function BarcodeScanner({ visible, busy, onScanned, onClose }: { visible:
           <CameraView
             style={StyleSheet.absoluteFill}
             facing="back"
-            barcodeScannerSettings={{ barcodeTypes: [...PRODUCT_BARCODES] }}
+            barcodeScannerSettings={{ barcodeTypes: config.types }}
             onBarcodeScanned={busy ? undefined : handleScan}
           />
         ) : null}
 
         <View style={{ paddingTop: insets.top + space.md, paddingHorizontal: space.lg, flexDirection: 'row', justifyContent: 'space-between' }}>
           <Txt variant="heading" style={{ color: '#fff' }}>
-            Scan barcode
+            {config.title}
           </Txt>
           <Pressable onPress={onClose} hitSlop={12}>
             <Txt variant="label" style={{ color: '#fff' }}>
@@ -78,9 +116,9 @@ export function BarcodeScanner({ visible, busy, onScanned, onClose }: { visible:
 
         {useCamera ? (
           <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-            <View style={{ width: 280, height: 160, borderRadius: radius.lg, borderWidth: 3, borderColor: colors.accent }} />
+            <View style={{ ...config.box, borderRadius: radius.lg, borderWidth: 3, borderColor: colors.accent }} />
             <Txt style={{ color: '#fff', marginTop: space.lg }} center>
-              {busy ? 'Looking it up…' : 'Line up the barcode inside the box'}
+              {busy ? 'Checking…' : config.hint}
             </Txt>
             {busy ? <ActivityIndicator color={colors.accent} style={{ marginTop: space.md }} /> : null}
           </View>
@@ -97,19 +135,21 @@ export function BarcodeScanner({ visible, busy, onScanned, onClose }: { visible:
                   {cameraAvailable && permission && !permission.granted ? 'Camera access is off' : 'No camera here'}
                 </Txt>
                 <Txt style={{ color: '#bbb' }} center>
-                  Type the numbers printed under the barcode instead.
+                  {config.typeHint}
                 </Txt>
                 <TextInput
                   value={typed}
-                  onChangeText={(t) => setTyped(t.replace(/\D/g, ''))}
-                  placeholder="e.g. 028400589895"
+                  onChangeText={(t) => setTyped(config.clean(t))}
+                  placeholder={config.placeholder}
                   placeholderTextColor="#777"
-                  keyboardType="number-pad"
+                  keyboardType={mode === 'product' ? 'number-pad' : 'default'}
+                  autoCapitalize="characters"
+                  autoCorrect={false}
                   maxLength={14}
                   onSubmitEditing={submitTyped}
                   style={{ height: 56, borderRadius: radius.md, backgroundColor: '#1c1c1e', color: '#fff', fontSize: 22, letterSpacing: 2, textAlign: 'center' }}
                 />
-                <Button label={busy ? 'Looking it up…' : 'Look it up'} kind="accent" disabled={busy || typed.length < 8} onPress={submitTyped} />
+                <Button label={busy ? 'Checking…' : mode === 'product' ? 'Look it up' : 'Confirm code'} kind="accent" disabled={busy || !config.valid(typed)} onPress={submitTyped} />
               </>
             )}
           </View>

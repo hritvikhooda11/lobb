@@ -3,6 +3,10 @@ import { Alert, Platform } from 'react-native';
 
 export type Photo = { uri: string; base64?: string | null };
 
+/** On web the picker returns a data: URL; pull the base64 out of it. */
+const withBase64 = (asset: Photo): Photo =>
+  !asset.base64 && asset.uri.startsWith('data:') ? { ...asset, base64: asset.uri.slice(asset.uri.indexOf(',') + 1) } : asset;
+
 /**
  * Takes a photo with the camera. Falls back to the photo library when there is no
  * camera (iOS Simulator, web) or camera permission is denied.
@@ -16,7 +20,7 @@ export async function takePhoto({ base64 = false }: { base64?: boolean } = {}): 
       try {
         const result = await ImagePicker.launchCameraAsync(options);
         if (result.canceled) return null;
-        return result.assets[0];
+        return withBase64(result.assets[0]);
       } catch {
         // No camera available (e.g. Simulator) — fall through to the library.
       }
@@ -27,5 +31,5 @@ export async function takePhoto({ base64 = false }: { base64?: boolean } = {}): 
 
   const result = await ImagePicker.launchImageLibraryAsync(options);
   if (result.canceled) return null;
-  return result.assets[0];
+  return withBase64(result.assets[0]);
 }

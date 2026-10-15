@@ -5,6 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Button, Divider, ItemPhoto, Pill, Row, Txt, tap } from '@/components/ui';
 import { money, priceFor, rentalDurations, rentalPriceFor } from '@/data/pricing';
+import { attempt } from '@/lib/alert';
 import { LIVE_STATUSES, useItem, useStore } from '@/store/app-store';
 import { radius, space, useTheme } from '@/theme';
 
@@ -15,6 +16,7 @@ export default function ConfirmRequest() {
   const { state, actions } = useStore();
   const [note, setNote] = useState('My door');
   const [durationId, setDurationId] = useState(rentalDurations[1].id);
+  const [busy, setBusy] = useState(false);
   const item = useItem(id);
   if (!item) return null;
 
@@ -101,11 +103,17 @@ export default function ConfirmRequest() {
       <Button
         label={hasLive ? 'Finish your current request first' : `${rent ? 'Borrow it' : 'Lobb it'} · ${money(total)}`}
         icon={hasLive ? undefined : rent ? '🔁' : '🙌'}
-        disabled={hasLive}
+        disabled={hasLive || busy}
         style={{ marginTop: space.xl }}
-        onPress={() => {
+        onPress={async () => {
+          setBusy(true);
+          let requestId = '';
+          const ok = await attempt(async () => {
+            requestId = await actions.createRequest(item, note.trim() || 'My door', rent ? durationId : undefined);
+          });
+          setBusy(false);
+          if (!ok) return;
           tap('success');
-          const requestId = actions.createRequest(item, note.trim() || 'My door', rent ? durationId : undefined);
           router.dismiss();
           router.push({ pathname: '/request/[id]', params: { id: requestId } });
         }}

@@ -1,32 +1,55 @@
 import { Image } from 'expo-image';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
-import { ActivityIndicator, Pressable, View } from 'react-native';
+import { Pressable, View } from 'react-native';
 
-import { CountdownRing, DemoControls } from '@/components/live';
+import { BarcodeScanner } from '@/components/barcode-scanner';
+import { CountdownRing } from '@/components/live';
 import { Button, Card, ItemBadge, Pill, Row, Screen, Txt, tap } from '@/components/ui';
 import { money } from '@/data/pricing';
-import { takePhoto } from '@/lib/photo';
-import { DELIVERY_WINDOW_MS, useItem, useNow, useStore } from '@/store/app-store';
-import { fonts, radius, space, useTheme } from '@/theme';
+import { attempt, showError } from '@/lib/alert';
+import { takePhoto, type Photo } from '@/lib/photo';
+import { DELIVERY_WINDOW_MS, useItem, useNow, useStore, type Job } from '@/store/app-store';
+import { fonts, space, useTheme } from '@/theme';
 
 const goHome = () => (router.canGoBack() ? router.back() : router.replace('/'));
+const sameBarcode = (a: string, b: string) => a.replace(/^0+/, '') === b.replace(/^0+/, '');
+
+const formatDue = (ms: number) => {
+  if (ms <= 0) return 'overdue';
+  const h = Math.floor(ms / 3600_000);
+  const m = Math.floor((ms % 3600_000) / 60_000);
+  return h > 0 ? `${h}h ${m}m` : `${m}m`;
+};
 
 /**
- * Deliverer flow: accept → verify (sale: barcode + seal photo; rental: condition photo)
- * → walk over → scan buyer QR → quick handoff photo → paid.
- * Barcode and QR scanning are mocked; production uses expo-camera's barcode scanner.
+ * Deliverer flow, all enforced by the database:
+ * accept → verify (sale: barcode + seal photo; rental: condition photo) → at the door
+ * → scan the buyer's QR → handoff photo → paid. Rentals end with scanning the return QR.
  */
 export default function Deliver() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { state, actions } = useStore();
+  const { state } = useStore();
   const job = state.jobs.find((j) => j.id === id);
   const item = useItem(job?.itemId);
-  const now = useNow(job?.status !== 'delivered');
-  const [qrScanned, setQrScanned] = useState(false);
-  if (!job || !item) return null;
+  const live = !!job && ['accepted', 'verified', 'arrived'].includes(job.status);
+  const now = useNow(live || job?.status === 'delivered');
+  if (!job || !item) {
+    return (
+      <Screen>
+        <Pressable onPress={goHome} hitSlop={12}>
+          <Txt variant="label" tone="primary">
+            ‹ Home
+          </Txt>
+        </Pressable>
+        <Txt tone="muted" style={{ marginTop: space.xxl }} center>
+          This request is no longer available.
+        </Txt>
+      </Screen>
+    );
+  }
   const rent = job.kind === 'rent';
-  const remaining = (job.acceptedAt ?? now) + DELIVERY_WINDOW_MS - now;
+  const remaining = (job.deadlineAt ?? (job.acceptedAt ?? now) + DELIVERY_WINDOW_MS) - now;
 
   return (
     <Screen>
@@ -52,34 +75,15 @@ export default function Deliver() {
         </View>
       </Row>
 
-      {job.status !== 'delivered' ? (
+      {live ? (
         <View style={{ alignItems: 'center', marginTop: space.xl }}>
           <CountdownRing remainingMs={remaining} totalMs={DELIVERY_WINDOW_MS} size={160} caption="to hand it over" />
         </View>
       ) : null}
 
-      {job.status === 'accepted' ? (
-        rent ? <ConditionCheck onDone={() => actions.markVerified(job.id)} /> : <SealCheck barcode={item.barcode} onDone={() => actions.markVerified(job.id)} />
-      ) : null}
-
-      {job.status === 'verified' ? (
-        <View style={{ marginTop: space.xl, gap: space.md }}>
-          <Txt variant="title">Head to {job.buyerName}</Txt>
-          <Card>
-            <Txt variant="label">📍 {job.location}</Txt>
-            <Txt variant="caption" tone="muted" style={{ marginTop: 4 }}>
-              {job.buyerName} will show a QR code. Scan it, then snap a quick photo of the handoff.
-            </Txt>
-          </Card>
-          <ScanStep label={`1. Scan ${job.buyerName}'s QR`} doneLabel="QR confirmed" onDone={() => setQrScanned(true)} />
-          <PhotoStep
-            label="2. Quick photo of the handoff"
-            hint={`${item.name} in ${job.buyerName}'s hands, or at the door`}
-            disabled={!qrScanned}
-            onDone={(uri) => actions.completeJob(job.id, uri)}
-          />
-        </View>
-      ) : null}
+      {job.status === 'incoming' ? <AcceptPrompt job={job} /> : null}
+      {job.status === 'accepted' ? rent ? <ConditionCheck jobId={job.id} /> : <SealCheck jobId={job.id} barcode={item.barcode} /> : null}
+      {job.status === 'verified' || job.status === 'arrived' ? <Handoff job={job} /> : null}
 
       {job.status === 'delivered' ? (
         <View style={{ alignItems: 'center', marginTop: space.xxxl, gap: space.lg }}>
@@ -88,110 +92,248 @@ export default function Deliver() {
             +{money(job.earnings)}
           </Txt>
           <Txt tone="muted" center>
-            {rent ? `Added to your wallet. ${job.buyerName} returns it in ${job.rentalLabel}.` : 'Added to your wallet. Nice hustle.'}
+            {rent && job.returnBy ? `Added to your wallet. ${job.buyerName} returns it in ${formatDue(job.returnBy - now)}.` : 'Added to your wallet. Nice hustle.'}
           </Txt>
-          {job.handoffPhotoUri ? (
-            <View style={{ alignItems: 'center', gap: 6 }}>
-              <Image source={{ uri: job.handoffPhotoUri }} style={{ width: 120, height: 120, borderRadius: radius.md }} contentFit="cover" />
-              <Txt variant="caption" tone="muted">
-                Handoff photo saved
-              </Txt>
-            </View>
-          ) : null}
           <Button label="Back to requests" kind="accent" onPress={goHome} style={{ alignSelf: 'stretch' }} />
         </View>
       ) : null}
 
-      {__DEV__ && job.status === 'accepted' ? <DemoControls label={rent ? 'Skip condition photo' : 'Skip seal check'} onPress={() => actions.markVerified(job.id)} /> : null}
+      {job.status === 'returning' ? <ReturnScan job={job} /> : null}
+
+      {job.status === 'returned' ? (
+        <View style={{ alignItems: 'center', marginTop: space.xxxl, gap: space.lg }}>
+          <Txt style={{ fontSize: 72, lineHeight: 86 }}>🤝</Txt>
+          <Txt variant="title" center>
+            You got it back
+          </Txt>
+          <Button label="Back to requests" kind="accent" onPress={goHome} style={{ alignSelf: 'stretch' }} />
+        </View>
+      ) : null}
+
+      {job.status === 'closed' ? (
+        <Txt tone="muted" style={{ marginTop: space.xxl }} center>
+          This request was cancelled or expired.
+        </Txt>
+      ) : null}
     </Screen>
   );
 }
 
-function SealCheck({ barcode, onDone }: { barcode?: string; onDone: () => void }) {
-  const [scanned, setScanned] = useState(false);
-  const [photo, setPhoto] = useState(false);
+function AcceptPrompt({ job }: { job: Job }) {
+  const { actions } = useStore();
+  const [busy, setBusy] = useState(false);
+  return (
+    <View style={{ marginTop: space.xl, gap: space.md }}>
+      <Txt tone="muted">First neighbor to accept gets it. You’ll have 10 minutes.</Txt>
+      <Button
+        label={busy ? 'Accepting…' : 'Accept · 10 min'}
+        kind="accent"
+        disabled={busy}
+        onPress={async () => {
+          setBusy(true);
+          await attempt(() => actions.acceptJob(job.id));
+          setBusy(false);
+        }}
+      />
+    </View>
+  );
+}
+
+function SealCheck({ jobId, barcode }: { jobId: string; barcode?: string }) {
+  const { actions } = useStore();
+  const [scanned, setScanned] = useState(!barcode);
+  const [scannerOpen, setScannerOpen] = useState(false);
+  const [photo, setPhoto] = useState<Photo | null>(null);
+  const [busy, setBusy] = useState(false);
   return (
     <View style={{ marginTop: space.xl, gap: space.md }}>
       <Txt variant="title">Verify the seal</Txt>
       <Txt tone="muted">Required before every delivery. Keeps everyone safe.</Txt>
-      <ScanStep label="1. Scan the barcode" doneLabel={`Barcode matches${barcode ? ` · ${barcode}` : ''}`} onDone={() => setScanned(true)} />
-      <PhotoStep label="2. Photo of the intact seal" hint="Show the factory seal clearly" disabled={!scanned} onDone={() => setPhoto(true)} />
-      <Button label="I'm heading out" icon="🏃" kind="accent" disabled={!scanned || !photo} onPress={onDone} style={{ marginTop: space.sm }} />
+      {barcode ? (
+        <StepCard done={scanned} icon="🔎" label="1. Scan the barcode" doneLabel="Barcode matches" onPress={() => setScannerOpen(true)} />
+      ) : (
+        <Txt variant="caption" tone="muted">
+          This item has no barcode on file, so just snap the seal.
+        </Txt>
+      )}
+      <PhotoStep label={barcode ? '2. Photo of the intact seal' : 'Photo of the intact seal'} hint="Show the factory seal clearly" disabled={!scanned} photo={photo} onPhoto={setPhoto} />
+      <Button
+        label={busy ? 'Saving…' : "I'm heading out"}
+        icon="🏃"
+        kind="accent"
+        disabled={!scanned || !photo?.base64 || busy}
+        onPress={async () => {
+          setBusy(true);
+          await attempt(() => actions.verifySeal(jobId, photo!.base64!));
+          setBusy(false);
+        }}
+        style={{ marginTop: space.sm }}
+      />
+      <BarcodeScanner
+        visible={scannerOpen}
+        busy={false}
+        onClose={() => setScannerOpen(false)}
+        onScanned={(code) => {
+          setScannerOpen(false);
+          if (barcode && sameBarcode(code, barcode)) {
+            tap('success');
+            setScanned(true);
+          } else {
+            showError('That barcode doesn’t match the item they asked for.', 'Wrong item');
+          }
+        }}
+      />
     </View>
   );
 }
 
-function ConditionCheck({ onDone }: { onDone: () => void }) {
-  const [photo, setPhoto] = useState(false);
+function ConditionCheck({ jobId }: { jobId: string }) {
+  const { actions } = useStore();
+  const [photo, setPhoto] = useState<Photo | null>(null);
+  const [busy, setBusy] = useState(false);
   return (
     <View style={{ marginTop: space.xl, gap: space.md }}>
       <Txt variant="title">Snap its condition</Txt>
       <Txt tone="muted">A quick photo before you lend it protects you if it comes back damaged.</Txt>
-      <PhotoStep label="Photo of the item" hint="Show any scratches or wear" onDone={() => setPhoto(true)} />
-      <Button label="I'm heading out" icon="🏃" kind="accent" disabled={!photo} onPress={onDone} style={{ marginTop: space.sm }} />
+      <PhotoStep label="Photo of the item" hint="Show any scratches or wear" photo={photo} onPhoto={setPhoto} />
+      <Button
+        label={busy ? 'Saving…' : "I'm heading out"}
+        icon="🏃"
+        kind="accent"
+        disabled={!photo?.base64 || busy}
+        onPress={async () => {
+          setBusy(true);
+          await attempt(() => actions.verifySeal(jobId, photo!.base64!));
+          setBusy(false);
+        }}
+        style={{ marginTop: space.sm }}
+      />
     </View>
   );
 }
 
-/** A real camera step: opens the camera (or library on Simulator), shows a thumbnail when done. */
-function PhotoStep({ label, hint, onDone, disabled }: { label: string; hint: string; onDone: (uri: string) => void; disabled?: boolean }) {
-  const { colors } = useTheme();
-  const [uri, setUri] = useState<string | null>(null);
+function Handoff({ job }: { job: Job }) {
+  const { actions } = useStore();
+  const [code, setCode] = useState<string | null>(null);
+  const [scannerOpen, setScannerOpen] = useState(false);
+  const [photo, setPhoto] = useState<Photo | null>(null);
+  const [busy, setBusy] = useState(false);
+  const arrived = job.status === 'arrived';
+
   return (
-    <Card
-      highlight={!!uri}
-      style={[{ opacity: disabled ? 0.45 : 1 }, uri && { backgroundColor: colors.successSoft, borderColor: colors.success }]}
-      onPress={
-        disabled || uri
-          ? undefined
-          : async () => {
-              const photo = await takePhoto();
-              if (!photo) return;
-              tap('success');
-              setUri(photo.uri);
-              onDone(photo.uri);
-            }
-      }>
+    <View style={{ marginTop: space.xl, gap: space.md }}>
+      <Txt variant="title">{arrived ? `Hand it to ${job.buyerName}` : `Head to ${job.buyerName}`}</Txt>
+      <Card>
+        <Txt variant="label">📍 {job.location}</Txt>
+        <Txt variant="caption" tone="muted" style={{ marginTop: 4 }}>
+          {job.buyerName} will show a QR code. Scan it, then snap a quick photo of the handoff.
+        </Txt>
+      </Card>
+      {!arrived ? (
+        <Button
+          label={busy ? 'Letting them know…' : "I'm at their door"}
+          icon="🚪"
+          disabled={busy}
+          onPress={async () => {
+            setBusy(true);
+            await attempt(() => actions.markArrived(job.id));
+            setBusy(false);
+          }}
+        />
+      ) : null}
+      <StepCard done={!!code} icon="📷" label={`1. Scan ${job.buyerName}'s QR`} doneLabel={`Code ${code} ready`} onPress={() => setScannerOpen(true)} />
+      <PhotoStep label="2. Quick photo of the handoff" hint="The item in their hands, or at the door" disabled={!code} photo={photo} onPhoto={setPhoto} />
+      <Button
+        label={busy ? 'Confirming…' : 'Complete handoff'}
+        kind="accent"
+        icon="✅"
+        disabled={!code || !photo?.base64 || busy}
+        onPress={async () => {
+          setBusy(true);
+          const ok = await attempt(() => actions.confirmHandoff(job.id, code!, photo!.base64!));
+          setBusy(false);
+          if (ok) tap('success');
+          else setCode(null);
+        }}
+      />
+      <BarcodeScanner
+        mode="handoff"
+        visible={scannerOpen}
+        busy={false}
+        onClose={() => setScannerOpen(false)}
+        onScanned={(c) => {
+          setScannerOpen(false);
+          setCode(c);
+        }}
+      />
+    </View>
+  );
+}
+
+function ReturnScan({ job }: { job: Job }) {
+  const { actions } = useStore();
+  const [scannerOpen, setScannerOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  return (
+    <View style={{ marginTop: space.xl, gap: space.md }}>
+      <Txt variant="title">{job.buyerName} is returning it</Txt>
+      <Txt tone="muted">Check it’s in the same condition, then scan their return QR code.</Txt>
+      <Button label={busy ? 'Confirming…' : 'Scan return QR'} icon="📷" kind="accent" disabled={busy} onPress={() => setScannerOpen(true)} />
+      <BarcodeScanner
+        mode="handoff"
+        visible={scannerOpen}
+        busy={busy}
+        onClose={() => setScannerOpen(false)}
+        onScanned={async (c) => {
+          setBusy(true);
+          await attempt(() => actions.confirmReturn(job.id, c));
+          setBusy(false);
+          setScannerOpen(false);
+        }}
+      />
+    </View>
+  );
+}
+
+function StepCard({ done, icon, label, doneLabel, onPress }: { done: boolean; icon: string; label: string; doneLabel: string; onPress: () => void }) {
+  const { colors } = useTheme();
+  return (
+    <Card highlight={done} style={done && { backgroundColor: colors.successSoft, borderColor: colors.success }} onPress={done ? undefined : onPress}>
       <Row>
-        {uri ? <Image source={{ uri }} style={{ width: 40, height: 40, borderRadius: 8 }} contentFit="cover" /> : <Txt style={{ fontSize: 26 }}>📸</Txt>}
-        <View style={{ flex: 1 }}>
-          <Txt style={{ fontFamily: fonts.displayMedium, fontSize: 16, color: uri ? colors.success : colors.text }}>{uri ? 'Photo saved' : label}</Txt>
-          {!uri ? (
-            <Txt variant="caption" tone="muted">
-              {hint}
-            </Txt>
-          ) : null}
-        </View>
+        <Txt style={{ fontSize: 26 }}>{done ? '✅' : icon}</Txt>
+        <Txt style={{ flex: 1, fontFamily: fonts.displayMedium, fontSize: 16, color: done ? colors.success : colors.text }}>{done ? doneLabel : label}</Txt>
       </Row>
     </Card>
   );
 }
 
-/** A mocked scanner step: tap → brief "scanning" state → done. */
-function ScanStep({ label, doneLabel, onDone, disabled }: { label: string; doneLabel: string; onDone: () => void; disabled?: boolean }) {
+/** A real camera step (library on Simulator/web). Shows a thumbnail once taken; tap to retake. */
+function PhotoStep({ label, hint, photo, onPhoto, disabled }: { label: string; hint: string; photo: Photo | null; onPhoto: (p: Photo) => void; disabled?: boolean }) {
   const { colors } = useTheme();
-  const [phase, setPhase] = useState<'idle' | 'scanning' | 'done'>('idle');
-  const done = phase === 'done';
   return (
     <Card
-      highlight={done}
-      style={[{ opacity: disabled ? 0.45 : 1 }, done && { backgroundColor: colors.successSoft, borderColor: colors.success }]}
+      highlight={!!photo}
+      style={[{ opacity: disabled ? 0.45 : 1 }, photo && { backgroundColor: colors.successSoft, borderColor: colors.success }]}
       onPress={
-        disabled || phase !== 'idle'
+        disabled
           ? undefined
-          : () => {
-              setPhase('scanning');
-              setTimeout(() => {
-                tap('success');
-                setPhase('done');
-                onDone();
-              }, 1100);
+          : async () => {
+              const p = await takePhoto({ base64: true });
+              if (!p) return;
+              tap('success');
+              onPhoto(p);
             }
       }>
       <Row>
-        <Txt style={{ fontSize: 26 }}>{done ? '✅' : '📷'}</Txt>
-        <Txt style={{ flex: 1, fontFamily: fonts.displayMedium, fontSize: 16, color: done ? colors.success : colors.text }}>{done ? doneLabel : label}</Txt>
-        {phase === 'scanning' ? <ActivityIndicator color={colors.primary} /> : null}
+        {photo ? <Image source={{ uri: photo.uri }} style={{ width: 40, height: 40, borderRadius: 8 }} contentFit="cover" /> : <Txt style={{ fontSize: 26 }}>📸</Txt>}
+        <View style={{ flex: 1 }}>
+          <Txt style={{ fontFamily: fonts.displayMedium, fontSize: 16, color: photo ? colors.success : colors.text }}>{photo ? 'Photo ready · tap to retake' : label}</Txt>
+          {!photo ? (
+            <Txt variant="caption" tone="muted">
+              {hint}
+            </Txt>
+          ) : null}
+        </View>
       </Row>
     </Card>
   );

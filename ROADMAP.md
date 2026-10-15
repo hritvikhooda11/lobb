@@ -23,14 +23,17 @@ These override PRODUCT_CONTEXT.md where they conflict.
 - Request flow is 2 taps from home (rule: ≤ 3).
 - Real product photos (bundled, credits in `assets/items/CREDITS.md`), Rent mode, list-an-item flow with AI pricing, handoff photos.
 
-## Phase 1 — Real backend
-- [ ] Supabase project; tables from PRODUCT_CONTEXT §16 with row-level security
-- [ ] @uw.edu email OTP sign-in; persist session
-- [ ] Item catalog seeded by UPC; eligibility flag enforced server-side
-- [ ] Requests via Realtime; **first-come-first-serve accept as a single atomic DB update** (no double-accepts)
-- [ ] Listed-seller priority window, then community broadcast (Edge Function + push)
-- [ ] Request expiry + deliverer 10-min deadline handled server-side (cron)
-- [ ] Replace `src/store/app-store.tsx` mocks with Supabase calls (screens stay as-is)
+## Phase 1 — Real backend (code done; needs your Supabase project — see SUPABASE_SETUP.md)
+- [x] Schema + row-level security (`supabase/migrations/`), tested in `npm run test:db`
+- [x] @uw.edu-only sign-in with 6-digit email codes; session persists
+- [x] Server-side pricing; sellers can't invent prices (AI quotes are issued by the server)
+- [x] First-come-first-serve accept as one atomic update; 20s listed-seller priority window
+- [x] Handoff/return codes only the buyer can read; 5-try lockout
+- [x] Live updates via Realtime (+10s poll); unanswered requests expire after 10 min (pg_cron)
+- [x] Real barcode check + seal/handoff photos uploaded to Storage
+- [ ] Create the Supabase project and push the schema (you)
+- [ ] Two-account live test
+- [ ] Push notifications for new requests (Expo Notifications + database webhook)
 
 ## AI pricing setup
 - Put your key in `.env` (copy `.env.example`): `ANTHROPIC_API_KEY=...` from console.anthropic.com. Without it the app uses category estimates (marked ESTIMATE).

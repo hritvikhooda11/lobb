@@ -3,10 +3,11 @@ import { useEffect, useState } from 'react';
 import { Pressable, View } from 'react-native';
 import QRCode from 'react-native-qrcode-svg';
 
-import { BUY_STEPS, CountdownRing, DemoControls, RadarPulse, RENT_STEPS, StatusSteps } from '@/components/live';
+import { BUY_STEPS, CountdownRing, RadarPulse, RENT_STEPS, StatusSteps } from '@/components/live';
 import { Button, Card, ItemBadge, ItemPhoto, Pill, Row, Screen, Txt, tap } from '@/components/ui';
 import { communities } from '@/data/catalog';
 import { money } from '@/data/pricing';
+import { attempt } from '@/lib/alert';
 import { DELIVERY_WINDOW_MS, LIVE_STATUSES, useItem, useNow, useStore, type RequestStatus } from '@/store/app-store';
 import { fonts, radius, space, useTheme } from '@/theme';
 
@@ -35,8 +36,8 @@ export default function RequestStatusScreen() {
 
   if (!r || !item) return null;
   const rent = r.kind === 'rent';
-  const community = communities.find((c) => c.id === state.user?.communityId);
-  const remaining = r.acceptedAt ? r.acceptedAt + DELIVERY_WINDOW_MS - now : DELIVERY_WINDOW_MS;
+  const community = communities.find((c) => c.id === state.profile?.communityId);
+  const remaining = r.deadlineAt ? r.deadlineAt - now : DELIVERY_WINDOW_MS;
   const total = r.rental ? r.rental.total : r.price.total;
   const name = r.deliverer?.name ?? 'Your neighbor';
 
@@ -83,7 +84,12 @@ export default function RequestStatusScreen() {
         {r.status === 'accepted' ? (
           <>
             <CountdownRing remainingMs={remaining} totalMs={DELIVERY_WINDOW_MS} caption={remaining > 0 ? 'until it’s at your door' : 'running late'} />
-            <DelivererCard name={name} rating={r.deliverer!.rating} floor={r.deliverer!.floor} rent={rent} />
+            <DelivererCard name={name} rating={r.deliverer?.rating ?? 5} rent={rent} />
+            {r.code ? (
+              <Txt variant="caption" tone="muted" center>
+                Your handoff code is <Txt variant="caption" style={{ fontFamily: fonts.display, letterSpacing: 2 }}>{r.code}</Txt>. We’ll show the QR when {name} is at your door.
+              </Txt>
+            ) : null}
             {remaining <= 0 ? (
               <Txt tone="warning" center>
                 {name} is past the 10-minute window. Keep waiting or cancel for free.
@@ -94,7 +100,7 @@ export default function RequestStatusScreen() {
 
         {r.status === 'arriving' ? (
           <HandoffQR
-            token={r.qrToken}
+            code={r.code}
             title={`${name} is at your door 🚪`}
             body={rent ? `Check it works, then let ${name} scan this. Your rental starts on scan.` : `Check the seal, then let ${name} scan this. Payment is released on scan.`}
           />
@@ -109,20 +115,33 @@ export default function RequestStatusScreen() {
               </Txt>
               <Txt style={{ fontFamily: fonts.display, fontSize: 44, lineHeight: 50 }}>{formatDue(r.returnBy - now)}</Txt>
               <Txt variant="caption" tone="muted">
-                to {name} · {r.deliverer!.floor}
+                to {name}
               </Txt>
             </View>
-            <Button label="Return it now" icon="↩️" onPress={() => actions.startReturn(r.id)} style={{ alignSelf: 'stretch' }} />
+            <Button label="Return it now" icon="↩️" onPress={() => attempt(() => actions.startReturn(r.id))} style={{ alignSelf: 'stretch' }} />
             <Txt variant="caption" tone="muted" center>
               Your {money(r.rental!.hold)} hold is released the moment {name} scans it back.
             </Txt>
           </>
         ) : null}
 
-        {r.status === 'returning' ? <HandoffQR token={r.qrToken} title={`Hand it back to ${name}`} body={`${name} scans this to confirm the return. Then your hold is released.`} /> : null}
+        {r.status === 'returning' ? <HandoffQR code={r.code} title={`Hand it back to ${name}`} body={`${name} scans this to confirm the return. Then your hold is released.`} /> : null}
 
         {r.status === 'delivered' ? <Done requestId={r.id} name={name} rated={r.rating} title="Delivered!" /> : null}
         {r.status === 'returned' ? <Done requestId={r.id} name={name} rated={r.rating} title="Returned!" subtitle={`Your ${money(r.rental!.hold)} hold is released.`} /> : null}
+
+        {r.status === 'expired' ? (
+          <>
+            <Txt style={{ fontSize: 64, lineHeight: 78 }}>😴</Txt>
+            <Txt variant="title" center>
+              Nobody was free
+            </Txt>
+            <Txt tone="muted" center>
+              No charge. Try again in a bit — more neighbors are around in the evening.
+            </Txt>
+            <Button label="Back home" kind="ghost" onPress={goHome} style={{ alignSelf: 'stretch' }} />
+          </>
+        ) : null}
 
         {r.status === 'cancelled' ? (
           <>
@@ -139,17 +158,14 @@ export default function RequestStatusScreen() {
       </View>
 
       {r.status === 'open' || (r.status === 'accepted' && remaining <= 0) ? (
-        <Button label="Cancel request" kind="danger" onPress={() => actions.cancelRequest(r.id)} style={{ marginTop: space.xxl }} />
+        <Button label="Cancel request" kind="danger" onPress={() => attempt(() => actions.cancelRequest(r.id))} style={{ marginTop: space.xxl }} />
       ) : null}
 
-      {__DEV__ && r.status === 'accepted' ? <DemoControls label={`Simulate: ${name} arrives`} onPress={() => actions.simulateArriving(r.id)} /> : null}
-      {__DEV__ && r.status === 'arriving' ? <DemoControls label={`Simulate: ${name} scans your QR`} onPress={() => actions.simulateHandoffScanned(r.id)} /> : null}
-      {__DEV__ && r.status === 'returning' ? <DemoControls label={`Simulate: ${name} scans the return`} onPress={() => actions.simulateReturnScanned(r.id)} /> : null}
     </Screen>
   );
 }
 
-function DelivererCard({ name, rating, floor, rent }: { name: string; rating: number; floor: string; rent: boolean }) {
+function DelivererCard({ name, rating, rent }: { name: string; rating: number; rent: boolean }) {
   const { colors } = useTheme();
   return (
     <Card style={{ alignSelf: 'stretch' }}>
@@ -162,7 +178,7 @@ function DelivererCard({ name, rating, floor, rent }: { name: string; rating: nu
         <View style={{ flex: 1 }}>
           <Txt variant="label">{name} accepted</Txt>
           <Txt variant="caption" tone="muted">
-            ★ {rating.toFixed(1)} · {floor} · {rent ? 'grabbing it now' : 'checking the seal, then heading over'}
+            ★ {rating.toFixed(1)} · UW verified · {rent ? 'grabbing it now' : 'checking the seal, then heading over'}
           </Txt>
         </View>
       </Row>
@@ -170,7 +186,7 @@ function DelivererCard({ name, rating, floor, rent }: { name: string; rating: nu
   );
 }
 
-function HandoffQR({ token, title, body }: { token: string; title: string; body: string }) {
+function HandoffQR({ code, title, body }: { code?: string; title: string; body: string }) {
   const { colors } = useTheme();
   return (
     <>
@@ -178,8 +194,13 @@ function HandoffQR({ token, title, body }: { token: string; title: string; body:
         {title}
       </Txt>
       <View style={{ padding: space.xl, backgroundColor: '#fff', borderRadius: radius.xl, shadowColor: colors.primary, shadowOpacity: 0.5, shadowRadius: 30 }}>
-        <QRCode value={token} size={200} color="#0D0A14" backgroundColor="#fff" />
+        {code ? <QRCode value={code} size={200} color="#0D0A14" backgroundColor="#fff" /> : <View style={{ width: 200, height: 200 }} />}
       </View>
+      {code ? (
+        <Txt style={{ fontFamily: fonts.display, fontSize: 28, letterSpacing: 6 }} center>
+          {code}
+        </Txt>
+      ) : null}
       <Txt tone="muted" center>
         {body}
       </Txt>
@@ -213,7 +234,7 @@ function Done({ requestId, name, rated, title, subtitle }: { requestId: string; 
             onPress={() => {
               tap();
               setStars(n);
-              actions.rateRequest(requestId, n);
+              attempt(() => actions.rateRequest(requestId, n));
             }}>
             <Txt style={{ fontSize: 38, color: n <= stars ? colors.warning : colors.border }}>★</Txt>
           </Pressable>
