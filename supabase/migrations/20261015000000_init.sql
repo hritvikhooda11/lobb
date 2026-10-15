@@ -216,6 +216,18 @@ create or replace function public.new_handoff_code() returns text language sql v
   from extensions.gen_random_bytes(6) b, generate_series(0, 5) i
 $$;
 
+-- ── Table access ────────────────────────────────────────────────────────────
+-- The project has "Automatically expose new tables" OFF, so grant exactly what the app needs.
+-- Row-level security (below) then limits which rows each user sees.
+
+revoke all on all tables in schema public from anon, authenticated;
+grant select on public.communities to anon, authenticated;
+grant select on public.profiles, public.items, public.requests, public.handoff_codes to authenticated;
+grant select, insert, update, delete on public.listings to authenticated;
+-- profiles: update(name, community_id) is granted after the RLS policies below.
+-- price_quotes and allowed_email_domains: no client access at all (server / functions only).
+grant all on all tables in schema public to service_role;
+
 -- ── Row-level security ──────────────────────────────────────────────────────
 
 alter table public.communities enable row level security;
@@ -233,7 +245,6 @@ create policy "see neighbors' profiles" on public.profiles for select to authent
   using (id = auth.uid() or community_id = public.my_community());
 create policy "edit own profile" on public.profiles for update to authenticated
   using (id = auth.uid()) with check (id = auth.uid());
-revoke update on public.profiles from authenticated;
 grant update (name, community_id) on public.profiles to authenticated;
 
 create policy "catalog is readable" on public.items for select to authenticated using (true);

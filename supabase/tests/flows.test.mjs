@@ -17,7 +17,7 @@ const SUPABASE_STUBS = `
 create role anon nologin; create role authenticated nologin; create role service_role nologin bypassrls;
 create schema extensions; create schema auth; create schema storage; create schema cron;
 grant usage on schema public, auth, extensions, storage to anon, authenticated, service_role;
-alter default privileges in schema public grant all on tables to anon, authenticated, service_role;
+-- Mirrors "Automatically expose new tables" = OFF: no default table grants; the migration must grant.
 alter default privileges in schema public grant all on functions to anon, authenticated, service_role;
 create table auth.users (id uuid primary key default gen_random_uuid(), email text not null);
 create function auth.uid() returns uuid language sql stable as $$ select nullif(current_setting('request.jwt.claim.sub', true), '')::uuid $$;
@@ -93,6 +93,9 @@ await expectOk('alex sets community', ids.alex, `update public.profiles set comm
 await expectOk('bri sets community', ids.bri, `update public.profiles set community_id = 'standard' where id = auth.uid()`);
 await expectOk('cam sets other community', ids.cam, `update public.profiles set community_id = 'west-campus' where id = auth.uid()`);
 await expectFail('cannot edit own rating', ids.alex, `update public.profiles set rating_avg = 1 where id = auth.uid()`, [], /permission denied/);
+await expectFail('cannot read price quotes', ids.alex, `select * from public.price_quotes`, [], /permission denied/);
+await expectFail('cannot read the email allowlist', ids.alex, `select * from public.allowed_email_domains`, [], /permission denied/);
+await expectFail('cannot delete requests', ids.alex, `delete from public.requests`, [], /permission denied/);
 
 console.log('\nBuy flow');
 await expectFail('cannot insert a request directly', ids.alex, `insert into public.requests (kind, buyer_id, item_id, community_id, item_price, deliverer_fee, platform_fee, total) values ('buy', auth.uid(), 'coke-12', 'standard', 1, 1, 1, 3)`);
