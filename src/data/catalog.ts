@@ -107,3 +107,11 @@ export function findDuplicate(items: Item[], name: string, kind: ItemKind): Item
     return typedInItem || itemInTyped;
   });
 }
+
+const stripZeros = (code: string) => code.replace(/^0+/, '');
+
+/** Exact barcode match (UPC-A and EAN-13 differ only by a leading zero). */
+export function findByBarcode(items: Item[], barcode: string, kind: ItemKind): Item | undefined {
+  const target = stripZeros(barcode);
+  return items.find((i) => i.kind === kind && i.barcode && stripZeros(i.barcode) === target);
+}

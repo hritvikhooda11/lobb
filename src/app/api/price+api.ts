@@ -13,7 +13,7 @@ import { z } from 'zod';
 import { categories, type CategoryId, type ItemKind } from '@/data/catalog';
 import { fallbackRetailPrice } from '@/data/pricing';
 
-export type PriceRequest = { name: string; category: CategoryId; kind: ItemKind; imageBase64?: string };
+export type PriceRequest = { name: string; category: CategoryId; kind: ItemKind; barcode?: string; imageBase64?: string; imageUrl?: string };
 
 export type PriceResponse = {
   name: string;
@@ -59,13 +59,17 @@ export async function POST(request: Request) {
   const content: Anthropic.Beta.BetaContentBlockParam[] = [];
   if (body.imageBase64) {
     content.push({ type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: body.imageBase64 } });
+  } else if (body.imageUrl?.startsWith('https://')) {
+    content.push({ type: 'image', source: { type: 'url', url: body.imageUrl } });
   }
+  const hasPhoto = !!(body.imageBase64 || body.imageUrl);
   content.push({
     type: 'text',
     text: `A seller wants to ${body.kind === 'buy' ? 'sell' : 'rent out'} this item.
 Name they typed: "${name}"
 Category they picked: ${category.label}
-${body.imageBase64 ? 'Their photo is attached — use it to identify the exact product and check it looks sealed (for selling).' : 'No photo.'}
+${body.barcode ? `Barcode (UPC/EAN): ${body.barcode}` : 'No barcode.'}
+${hasPhoto ? 'Their photo is attached — use it to identify the exact product and check it looks sealed (for selling).' : 'No photo.'}
 
 Search the web for the typical current US retail price of one unit, then decide if it's eligible.`,
   });

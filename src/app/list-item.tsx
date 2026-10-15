@@ -4,9 +4,11 @@ import { useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import type { BarcodeResponse } from '@/app/api/barcode+api';
 import type { PriceResponse } from '@/app/api/price+api';
+import { BarcodeScanner } from '@/components/barcode-scanner';
 import { Button, Card, ItemBadge, Pill, Row, Txt, tap } from '@/components/ui';
-import { canRent, categories, findDuplicate, getCategory, type CategoryId, type Item, type ItemKind } from '@/data/catalog';
+import { canRent, categories, findByBarcode, findDuplicate, getCategory, type CategoryId, type Item, type ItemKind } from '@/data/catalog';
 import { MAX_ADJUST_PCT, money, rentPerDay, sellerEarnings } from '@/data/pricing';
 import { takePhoto, type Photo } from '@/lib/photo';
 import { useStore } from '@/store/app-store';
@@ -25,8 +27,14 @@ export default function ListItem() {
   const [pricing, setPricing] = useState<'idle' | 'loading'>('idle');
   const [quote, setQuote] = useState<PriceResponse | null>(null);
   const [adjust, setAdjust] = useState(0);
+  const [scannerOpen, setScannerOpen] = useState(false);
+  const [lookingUp, setLookingUp] = useState(false);
+  const [scan, setScan] = useState<BarcodeResponse | null>(null);
 
-  const duplicate = useMemo(() => (name.trim().length >= 3 ? findDuplicate(state.items, name, kind) : undefined), [state.items, name, kind]);
+  const duplicate = useMemo(
+    () => (scan && findByBarcode(state.items, scan.barcode, kind)) || (name.trim().length >= 3 ? findDuplicate(state.items, name, kind) : undefined),
+    [state.items, name, kind, scan],
+  );
   const allowedCategories = categories.filter((c) => (kind === 'rent' ? canRent(c.id) : true));
   const needsSealCheck = kind === 'buy' && category !== null;
   const ready = name.trim().length >= 2 && photo && category && (!needsSealCheck || sealed);
@@ -36,6 +44,32 @@ export default function ListItem() {
     setAdjust(0);
   };
 
+  async function onScanned(code: string) {
+    setLookingUp(true);
+    try {
+      const res = await fetch(`/api/barcode?code=${code}`);
+      const result: BarcodeResponse = res.ok ? await res.json() : { found: false, barcode: code };
+      // A miss shouldn't leave the previous scan's product filled in.
+      if (!result.found && scan?.found) {
+        setName('');
+        setPhoto(null);
+        setCategory(null);
+      }
+      setScan(result);
+      resetQuote();
+      if (result.found) {
+        setName(result.name);
+        if (result.imageUrl) setPhoto({ uri: result.imageUrl });
+        if (result.category && (kind === 'buy' || canRent(result.category))) setCategory(result.category);
+      }
+    } catch {
+      setScan({ found: false, barcode: code });
+    } finally {
+      setLookingUp(false);
+      setScannerOpen(false);
+    }
+  }
+
   async function getPrice() {
     if (!ready) return;
     setPricing('loading');
@@ -43,7 +77,14 @@ export default function ListItem() {
       const res = await fetch('/api/price', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: name.trim(), category, kind, imageBase64: photo?.base64 ?? undefined }),
+        body: JSON.stringify({
+          name: name.trim(),
+          category,
+          kind,
+          barcode: scan?.barcode,
+          imageBase64: photo?.base64 ?? undefined,
+          imageUrl: !photo?.base64 && photo?.uri.startsWith('https://') ? photo.uri : undefined,
+        }),
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       setQuote(await res.json());
@@ -65,7 +106,10 @@ export default function ListItem() {
 
   function listNew() {
     if (!quote || !photo || !category) return;
-    actions.createItem({ name: quote.name || name.trim(), size: quote.size, category, kind, marketPrice: quote.retailPriceCents, photoUri: photo.uri }, adjust);
+    actions.createItem(
+      { name: quote.name || name.trim(), size: quote.size || (scan?.found ? scan.size : ''), category, kind, marketPrice: quote.retailPriceCents, photoUri: photo.uri, barcode: scan?.barcode },
+      adjust,
+    );
     tap('success');
     router.back();
   }
@@ -102,8 +146,50 @@ export default function ListItem() {
         })}
       </Row>
 
+      {kind === 'buy' ? (
+        <Pressable
+          onPress={() => {
+            tap();
+            setScannerOpen(true);
+          }}
+          style={{ flexDirection: 'row', alignItems: 'center', gap: space.md, padding: space.lg, borderRadius: radius.lg, backgroundColor: colors.primary }}>
+          <Txt style={{ fontSize: 30, lineHeight: 36 }}>📷</Txt>
+          <View style={{ flex: 1 }}>
+            <Txt variant="heading" tone="onPrimary">
+              {scan ? 'Scan another barcode' : 'Scan the barcode'}
+            </Txt>
+            <Txt variant="caption" tone="onPrimary" style={{ opacity: 0.8 }}>
+              Fills in the name and photo for you
+            </Txt>
+          </View>
+          <Txt tone="onPrimary" style={{ fontSize: 22 }}>
+            →
+          </Txt>
+        </Pressable>
+      ) : null}
+
+      {scan ? (
+        scan.found ? (
+          <Row gap={space.sm}>
+            <Pill label={`✓ Found via ${scan.source}`} tone="success" />
+            <Txt variant="caption" tone="muted">
+              {scan.barcode}
+            </Txt>
+          </Row>
+        ) : (
+          <Card style={{ borderColor: colors.warning, backgroundColor: colors.warningSoft, paddingVertical: space.md }}>
+            <Txt variant="label" tone="warning">
+              No match for {scan.barcode}
+            </Txt>
+            <Txt variant="caption" tone="muted">
+              Type the name and add a photo below. The barcode is saved with your listing.
+            </Txt>
+          </Card>
+        )
+      ) : null}
+
       <View style={{ gap: space.sm }}>
-        <Txt variant="label">What is it?</Txt>
+        <Txt variant="label">{kind === 'buy' && !scan ? 'Or type what it is' : 'What is it?'}</Txt>
         <TextInput
           value={name}
           onChangeText={(t) => {
@@ -201,6 +287,8 @@ export default function ListItem() {
           {quote ? <QuoteCard quote={quote} kind={kind} category={category!} adjust={adjust} onAdjust={setAdjust} onList={listNew} /> : null}
         </>
       )}
+
+      <BarcodeScanner visible={scannerOpen} busy={lookingUp} onScanned={onScanned} onClose={() => setScannerOpen(false)} />
     </ScrollView>
   );
 }
