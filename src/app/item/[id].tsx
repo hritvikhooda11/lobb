@@ -35,7 +35,7 @@ export default function ConfirmRequest() {
         <Txt tone="muted">{item.size}</Txt>
       </View>
       <Row gap={space.sm} style={{ marginTop: space.md, flexWrap: 'wrap' }}>
-        {rent ? <Pill label="🔁 Borrow & return" tone="warning" /> : <Pill label="🔒 Factory sealed" tone="success" />}
+        {rent ? <Pill icon="repeat" label="Borrow & return" tone="warning" /> : <Pill icon="lock-closed" label="Factory sealed" tone="success" />}
         <Pill label={`● ${item.nearbyCount} in your building`} tone="accent" />
         <Pill label="⏱ ≤ 10 min" tone="primary" />
       </Row>
@@ -102,7 +102,7 @@ export default function ConfirmRequest() {
 
       <Button
         label={hasLive ? 'Finish your current request first' : `${rent ? 'Borrow it' : 'Lobb it'} · ${money(total)}`}
-        icon={hasLive ? undefined : rent ? '🔁' : '🙌'}
+        icon={hasLive ? undefined : rent ? 'repeat' : 'flash'}
         disabled={hasLive || busy}
         style={{ marginTop: space.xl }}
         onPress={async () => {

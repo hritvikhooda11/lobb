@@ -4,7 +4,7 @@ import { Pressable, View } from 'react-native';
 import QRCode from 'react-native-qrcode-svg';
 
 import { BUY_STEPS, CountdownRing, RadarPulse, RENT_STEPS, StatusSteps } from '@/components/live';
-import { Button, Card, ItemBadge, ItemPhoto, Pill, Row, Screen, Txt, tap } from '@/components/ui';
+import { Button, Card, Icon, ItemBadge, ItemPhoto, Pill, Row, Screen, StateBadge, Txt, tap } from '@/components/ui';
 import { communities } from '@/data/catalog';
 import { money } from '@/data/pricing';
 import { attempt } from '@/lib/alert';
@@ -101,7 +101,7 @@ export default function RequestStatusScreen() {
         {r.status === 'arriving' ? (
           <HandoffQR
             code={r.code}
-            title={`${name} is at your door 🚪`}
+            title={`${name} is at your door`}
             body={rent ? `Check it works, then let ${name} scan this. Your rental starts on scan.` : `Check the seal, then let ${name} scan this. Payment is released on scan.`}
           />
         ) : null}
@@ -118,7 +118,7 @@ export default function RequestStatusScreen() {
                 to {name}
               </Txt>
             </View>
-            <Button label="Return it now" icon="↩️" onPress={() => attempt(() => actions.startReturn(r.id))} style={{ alignSelf: 'stretch' }} />
+            <Button label="Return it now" icon="return-down-back" onPress={() => attempt(() => actions.startReturn(r.id))} style={{ alignSelf: 'stretch' }} />
             <Txt variant="caption" tone="muted" center>
               Your {money(r.rental!.hold)} hold is released the moment {name} scans it back.
             </Txt>
@@ -132,7 +132,7 @@ export default function RequestStatusScreen() {
 
         {r.status === 'expired' ? (
           <>
-            <Txt style={{ fontSize: 64, lineHeight: 78 }}>😴</Txt>
+            <StateBadge icon="moon" tone="muted" />
             <Txt variant="title" center>
               Nobody was free
             </Txt>
@@ -145,7 +145,7 @@ export default function RequestStatusScreen() {
 
         {r.status === 'cancelled' ? (
           <>
-            <Txt style={{ fontSize: 64, lineHeight: 78 }}>🫡</Txt>
+            <StateBadge icon="close" tone="muted" />
             <Txt variant="title" center>
               Request cancelled
             </Txt>
@@ -214,7 +214,7 @@ function Done({ requestId, name, rated, title, subtitle }: { requestId: string; 
   const [stars, setStars] = useState(rated ?? 0);
   return (
     <>
-      <Txt style={{ fontSize: 72, lineHeight: 86 }}>🎉</Txt>
+      <StateBadge icon="checkmark" tone="success" />
       <Txt variant="title" center>
         {title}
       </Txt>
@@ -236,7 +236,7 @@ function Done({ requestId, name, rated, title, subtitle }: { requestId: string; 
               setStars(n);
               attempt(() => actions.rateRequest(requestId, n));
             }}>
-            <Txt style={{ fontSize: 38, color: n <= stars ? colors.warning : colors.border }}>★</Txt>
+            <Icon name={n <= stars ? 'star' : 'star-outline'} size={36} color={n <= stars ? colors.warning : colors.textMuted} />
           </Pressable>
         ))}
       </Row>

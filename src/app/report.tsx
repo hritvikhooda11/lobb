@@ -2,7 +2,7 @@ import { router } from 'expo-router';
 import { useState } from 'react';
 import { TextInput, View } from 'react-native';
 
-import { Button, Card, Row, Screen, Txt } from '@/components/ui';
+import { Button, Card, Row, Screen, StateBadge, Txt } from '@/components/ui';
 import { radius, space, useTheme } from '@/theme';
 
 const REASONS = ['Wrong item', 'Seal was broken', 'Never arrived', 'Buyer no-show', 'Safety concern', 'Something else'];
@@ -17,7 +17,7 @@ export default function Report() {
     return (
       <Screen>
         <View style={{ alignItems: 'center', marginTop: space.xxxl, gap: space.lg }}>
-          <Txt style={{ fontSize: 64, lineHeight: 78 }}>🛟</Txt>
+          <StateBadge icon="shield-checkmark" />
           <Txt variant="title" center>
             We're on it
           </Txt>

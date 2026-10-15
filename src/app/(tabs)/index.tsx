@@ -2,7 +2,8 @@ import { router } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { Pressable, ScrollView, Switch, TextInput, View } from 'react-native';
 
-import { Button, Card, ItemBadge, ItemPhoto, Pill, Row, Screen, SectionHeader, Txt, tap } from '@/components/ui';
+import { CategoryCircles, ItemGrid, ItemRow, PromoCarousel } from '@/components/shop';
+import { Button, Card, Icon, IconButton, ItemBadge, Pill, Row, Screen, SectionHeader, Txt, tap, type IconName } from '@/components/ui';
 import { canRent, categories, communities, type CategoryId, type ItemKind } from '@/data/catalog';
 import { money, priceFor, rentPerDay, sellerEarnings } from '@/data/pricing';
 import { attempt } from '@/lib/alert';
@@ -11,17 +12,23 @@ import { fonts, radius, space, useTheme } from '@/theme';
 
 type Mode = 'buy' | 'rent' | 'sell';
 
-const TITLES: Record<Mode, string> = { buy: 'What do you need?', rent: 'Borrow it for a bit', sell: 'Make some cash' };
-
 export default function Home() {
   const { state, actions } = useStore();
   const community = communities.find((c) => c.id === state.profile?.communityId);
   return (
     <Screen>
-      <Txt variant="caption" tone="muted">
-        📍 {community?.name}
-      </Txt>
-      <Txt variant="title">{TITLES[state.mode]}</Txt>
+      <Row style={{ justifyContent: 'space-between' }}>
+        <View style={{ flex: 1 }}>
+          <Txt variant="caption" tone="muted">
+            {state.mode === 'sell' ? 'Selling in' : 'Delivering to'}
+          </Txt>
+          <Row gap={4}>
+            <Txt style={{ fontFamily: fonts.display, fontSize: 20 }}>{community?.name}</Txt>
+            <Icon name="chevron-down" size={18} tone="primary" />
+          </Row>
+        </View>
+        <IconButton icon="receipt-outline" onPress={() => router.push('/activity')} />
+      </Row>
       <ModeToggle mode={state.mode} onChange={actions.setMode} />
       {state.mode === 'sell' ? <SellMode /> : <Browse kind={state.mode} />}
     </Screen>
@@ -30,14 +37,14 @@ export default function Home() {
 
 function ModeToggle({ mode, onChange }: { mode: Mode; onChange: (m: Mode) => void }) {
   const { colors } = useTheme();
-  const options: { id: Mode; label: string }[] = [
-    { id: 'buy', label: '🛍️ Buy' },
-    { id: 'rent', label: '🔁 Rent' },
-    { id: 'sell', label: '💸 Sell' },
+  const options: { id: Mode; label: string; icon: IconName }[] = [
+    { id: 'buy', label: 'Buy', icon: 'bag-handle' },
+    { id: 'rent', label: 'Rent', icon: 'repeat' },
+    { id: 'sell', label: 'Sell', icon: 'cash' },
   ];
   return (
     <Row gap={4} style={{ backgroundColor: colors.surfaceHigh, borderRadius: radius.pill, padding: 4, marginTop: space.lg }}>
-      {options.map(({ id, label }) => {
+      {options.map(({ id, label, icon }) => {
         const active = id === mode;
         const bg = active ? (id === 'sell' ? colors.accent : colors.primary) : 'transparent';
         const fg = active ? (id === 'sell' ? colors.onAccent : colors.onPrimary) : colors.textMuted;
@@ -48,7 +55,8 @@ function ModeToggle({ mode, onChange }: { mode: Mode; onChange: (m: Mode) => voi
               tap();
               onChange(id);
             }}
-            style={{ flex: 1, height: 44, borderRadius: radius.pill, backgroundColor: bg, alignItems: 'center', justifyContent: 'center' }}>
+            style={{ flex: 1, height: 42, borderRadius: radius.pill, backgroundColor: bg, flexDirection: 'row', gap: 6, alignItems: 'center', justifyContent: 'center' }}>
+            <Icon name={icon} size={17} color={fg} />
             <Txt style={{ fontFamily: fonts.display, fontSize: 15, color: fg }}>{label}</Txt>
           </Pressable>
         );
@@ -64,83 +72,79 @@ function Browse({ kind }: { kind: ItemKind }) {
   const [cat, setCat] = useState<CategoryId | null>(null);
   const live = state.requests.find((r) => LIVE_STATUSES.includes(r.status));
   const cats = categories.filter((c) => (kind === 'rent' ? canRent(c.id) : true));
+  const community = communities.find((c) => c.id === state.profile?.communityId);
 
-  const items = useMemo(() => {
+  const all = useMemo(() => state.items.filter((i) => i.kind === kind), [state.items, kind]);
+  const filtering = !!query.trim() || !!cat;
+  const results = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return state.items.filter((i) => i.kind === kind && (!cat || i.category === cat) && (!q || i.name.toLowerCase().includes(q)));
-  }, [state.items, kind, query, cat]);
+    return all.filter((i) => (!cat || i.category === cat) && (!q || i.name.toLowerCase().includes(q)));
+  }, [all, query, cat]);
+
+  const popular = [...all].sort((a, b) => b.nearbyCount - a.nearbyCount).slice(0, 8);
+  const cheap = all.filter((i) => priceFor(i).total <= 300);
+  const fromNeighbors = all.filter((i) => !bundledCatalogId(i.id));
 
   return (
     <View>
       {live ? <LiveBanner requestId={live.id} /> : null}
 
-      <TextInput
-        value={query}
-        onChangeText={setQuery}
-        placeholder={kind === 'buy' ? '🔍  Search snacks, drinks, chargers…' : '🔍  Search calculators, cables, umbrellas…'}
-        placeholderTextColor={colors.textMuted}
-        style={{ marginTop: space.lg, height: 50, borderRadius: radius.md, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, paddingHorizontal: space.lg, color: colors.text, fontSize: 16 }}
-      />
-
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: space.md, marginHorizontal: -space.lg }} contentContainerStyle={{ paddingHorizontal: space.lg, gap: space.sm }}>
-        {cats.map((c) => {
-          const active = c.id === cat;
-          return (
-            <Pressable
-              key={c.id}
-              onPress={() => {
-                tap();
-                setCat(active ? null : c.id);
-              }}
-              style={{ paddingHorizontal: 14, height: 38, borderRadius: radius.pill, justifyContent: 'center', backgroundColor: active ? colors.primarySoft : colors.surface, borderWidth: 1, borderColor: active ? colors.primary : colors.border }}>
-              <Txt variant="label" tone={active ? 'primary' : 'default'}>
-                {c.emoji} {c.label}
-              </Txt>
-            </Pressable>
-          );
-        })}
-      </ScrollView>
-
-      <SectionHeader title={kind === 'buy' ? 'Available in your building' : 'Borrow from neighbors'} />
-      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: space.md }}>
-        {items.map((item) => (
-          <Card
-            key={item.id}
-            onPress={item.addedByMe ? undefined : () => router.push({ pathname: '/item/[id]', params: { id: item.id } })}
-            style={{ width: '47.8%', padding: space.sm, gap: space.sm }}>
-            <ItemPhoto item={item} height={112} />
-            <View style={{ paddingHorizontal: 4 }}>
-              <Txt variant="label" numberOfLines={1}>
-                {item.name}
-              </Txt>
-              <Txt variant="caption" tone="muted" numberOfLines={1}>
-                {item.size || ' '}
-              </Txt>
-            </View>
-            <Row style={{ justifyContent: 'space-between', paddingHorizontal: 4, paddingBottom: 4 }}>
-              <Txt style={{ fontFamily: fonts.display, fontSize: 17 }}>
-                {kind === 'buy' ? money(priceFor(item).total) : `${money(rentPerDay(item))}`}
-                {kind === 'rent' ? <Txt variant="caption" tone="muted">/day</Txt> : null}
-              </Txt>
-              {item.addedByMe ? (
-                <Pill label="Yours" tone="primary" />
-              ) : (
-                <Txt variant="caption" tone="success">
-                  ● {item.nearbyCount}
-                </Txt>
-              )}
-            </Row>
-          </Card>
-        ))}
-        {items.length === 0 ? (
-          <Txt tone="muted" style={{ marginTop: space.lg }}>
-            Nothing matches yet. {kind === 'buy' ? 'Only sealed, shelf-stable items are on Lobb.' : 'Neighbors add new rentals all the time.'}
-          </Txt>
+      <Row gap={space.sm} style={{ marginTop: space.lg, height: 50, borderRadius: radius.pill, backgroundColor: colors.surfaceHigh, paddingHorizontal: space.lg }}>
+        <Icon name="search" size={18} tone="muted" />
+        <TextInput
+          value={query}
+          onChangeText={setQuery}
+          placeholder={kind === 'buy' ? 'Search snacks, drinks, chargers' : 'Search calculators, cables, umbrellas'}
+          placeholderTextColor={colors.textMuted}
+          style={{ flex: 1, height: '100%', color: colors.text, fontSize: 16 }}
+        />
+        {query ? (
+          <Pressable onPress={() => setQuery('')} hitSlop={10}>
+            <Icon name="close-circle" size={18} tone="muted" />
+          </Pressable>
         ) : null}
-      </View>
+      </Row>
+
+      {!filtering ? <PromoCarousel kind={kind} onPick={(c) => setCat(c ?? null)} /> : null}
+      <CategoryCircles kind={kind} cats={cats} active={cat} onPick={setCat} />
+
+      {filtering ? (
+        <>
+          <SectionHeader
+            title={cat ? categories.find((c) => c.id === cat)!.label : `Results for “${query.trim()}”`}
+            subtitle={`${results.length} ${results.length === 1 ? 'item' : 'items'}`}
+            action="Clear"
+            onAction={() => {
+              setCat(null);
+              setQuery('');
+            }}
+          />
+          {results.length ? (
+            <ItemGrid items={results} />
+          ) : (
+            <Txt tone="muted" style={{ marginTop: space.md }}>
+              Nothing matches yet. {kind === 'buy' ? 'Only sealed, shelf-stable items are on Lobb.' : 'Neighbors add new rentals all the time.'}
+            </Txt>
+          )}
+        </>
+      ) : kind === 'buy' ? (
+        <>
+          <ItemRow title={`Popular in ${community?.name ?? 'your building'}`} subtitle="Most neighbors have these on hand" items={popular} />
+          <ItemRow title="Under $3" subtitle="Total price, delivery included" items={cheap} />
+          <ItemRow title="New from neighbors" subtitle="Just listed in your building" items={fromNeighbors} />
+        </>
+      ) : (
+        <>
+          <ItemRow title="Borrow for tonight" subtitle="Return it when you’re done" items={popular} />
+          <ItemRow title="Study essentials" items={all.filter((i) => i.category === 'electronics')} />
+          <ItemRow title="Around the house" items={all.filter((i) => i.category === 'household')} />
+        </>
+      )}
     </View>
   );
 }
+
+const bundledCatalogId = (id: string) => !id.startsWith('user-');
 
 function LiveBanner({ requestId }: { requestId: string }) {
   const { colors } = useTheme();
@@ -156,7 +160,7 @@ function LiveBanner({ requestId }: { requestId: string }) {
     returning: `Returning to ${name}`,
   }[r.status as 'open' | 'accepted' | 'arriving' | 'renting' | 'returning'];
   return (
-    <Card onPress={() => router.push({ pathname: '/request/[id]', params: { id: r.id } })} style={{ marginTop: space.lg, backgroundColor: colors.primary, borderColor: colors.primary }}>
+    <Card onPress={() => router.push({ pathname: '/request/[id]', params: { id: r.id } })} style={{ marginTop: space.lg, backgroundColor: colors.primary }}>
       <Row>
         <ItemBadge item={item} size={44} />
         <View style={{ flex: 1 }}>
@@ -167,9 +171,7 @@ function LiveBanner({ requestId }: { requestId: string }) {
             {item.name} · tap to track
           </Txt>
         </View>
-        <Txt tone="onPrimary" style={{ fontSize: 22 }}>
-          →
-        </Txt>
+        <Icon name="chevron-forward" size={22} tone="onPrimary" />
       </Row>
     </Card>
   );
@@ -197,7 +199,7 @@ function SellMode() {
         </Txt>
       </Card>
 
-      <Button label="List an item" icon="📸" onPress={() => router.push('/list-item')} style={{ marginTop: space.md }} />
+      <Button label="List an item" icon="add-circle" onPress={() => router.push('/list-item')} style={{ marginTop: space.md }} />
 
       {active && activeItem ? (
         <Card highlight onPress={() => router.push({ pathname: '/deliver/[id]', params: { id: active.id } })} style={{ marginTop: space.md }}>
@@ -209,9 +211,7 @@ function SellMode() {
                 {active.buyerName} · {active.location}
               </Txt>
             </View>
-            <Txt tone="primary" style={{ fontSize: 22 }}>
-              →
-            </Txt>
+            <Icon name="chevron-forward" size={22} tone="primary" />
           </Row>
         </Card>
       ) : null}
@@ -242,8 +242,8 @@ function IncomingCard({ jobId, blocked }: { jobId: string; blocked: boolean }) {
   return (
     <Card highlight={job.priority}>
       <Row gap={space.sm} style={{ marginBottom: space.sm, flexWrap: 'wrap' }}>
-        {job.priority ? <Pill label="⭐ MATCHES YOUR LISTING" tone="primary" /> : null}
-        {job.kind === 'rent' ? <Pill label={`🔁 RENT · ${job.rentalLabel}`} tone="warning" /> : null}
+        {job.priority ? <Pill icon="star" label="MATCHES YOUR LISTING" tone="primary" /> : null}
+        {job.kind === 'rent' ? <Pill icon="repeat" label={`RENT · ${job.rentalLabel}`} tone="warning" /> : null}
       </Row>
       <Row>
         <ItemBadge item={item} />

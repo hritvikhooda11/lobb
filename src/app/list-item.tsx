@@ -7,7 +7,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { BarcodeResponse } from '@/app/api/barcode+api';
 import type { PriceResponse } from '@/app/api/price+api';
 import { BarcodeScanner } from '@/components/barcode-scanner';
-import { Button, Card, ItemBadge, Pill, Row, Txt, tap } from '@/components/ui';
+import { Button, Card, Icon, ItemBadge, Pill, Row, Txt, tap } from '@/components/ui';
 import { canRent, categories, findByBarcode, findDuplicate, getCategory, type CategoryId, type Item, type ItemKind } from '@/data/catalog';
 import { MAX_ADJUST_PCT, money, rentPerDay, sellerEarnings } from '@/data/pricing';
 import { attempt, showError } from '@/lib/alert';
@@ -139,9 +139,12 @@ export default function ListItem() {
                 resetQuote();
               }}
               style={{ flex: 1, height: 40, borderRadius: radius.pill, backgroundColor: active ? colors.accent : 'transparent', alignItems: 'center', justifyContent: 'center' }}>
-              <Txt variant="label" style={{ color: active ? colors.onAccent : colors.textMuted }}>
-                {k === 'buy' ? '💸 Sell it' : '🔁 Rent it out'}
-              </Txt>
+              <Row gap={6}>
+                <Icon name={k === 'buy' ? 'cash' : 'repeat'} size={16} color={active ? colors.onAccent : colors.textMuted} />
+                <Txt variant="label" style={{ color: active ? colors.onAccent : colors.textMuted }}>
+                  {k === 'buy' ? 'Sell it' : 'Rent it out'}
+                </Txt>
+              </Row>
             </Pressable>
           );
         })}
@@ -154,7 +157,7 @@ export default function ListItem() {
             setScannerOpen(true);
           }}
           style={{ flexDirection: 'row', alignItems: 'center', gap: space.md, padding: space.lg, borderRadius: radius.lg, backgroundColor: colors.primary }}>
-          <Txt style={{ fontSize: 30, lineHeight: 36 }}>📷</Txt>
+          <Icon name="barcode-outline" size={30} tone="onPrimary" />
           <View style={{ flex: 1 }}>
             <Txt variant="heading" tone="onPrimary">
               {scan ? 'Scan another barcode' : 'Scan the barcode'}
@@ -163,16 +166,14 @@ export default function ListItem() {
               Fills in the name and photo for you
             </Txt>
           </View>
-          <Txt tone="onPrimary" style={{ fontSize: 22 }}>
-            →
-          </Txt>
+          <Icon name="chevron-forward" size={22} tone="onPrimary" />
         </Pressable>
       ) : null}
 
       {scan ? (
         scan.found ? (
           <Row gap={space.sm}>
-            <Pill label={`✓ Found via ${scan.source}`} tone="success" />
+            <Pill icon="checkmark-circle" label={`Found via ${scan.source}`} tone="success" />
             <Txt variant="caption" tone="muted">
               {scan.barcode}
             </Txt>
@@ -222,7 +223,7 @@ export default function ListItem() {
                 <Image source={{ uri: photo.uri }} style={{ width: '100%', height: '100%' }} contentFit="cover" />
               ) : (
                 <View style={{ alignItems: 'center', gap: 6 }}>
-                  <Txt style={{ fontSize: 36, lineHeight: 44 }}>📸</Txt>
+                  <Icon name="camera" size={36} tone="primary" />
                   <Txt variant="label" tone="primary">
                     Take a photo
                   </Txt>
@@ -266,7 +267,7 @@ export default function ListItem() {
             <Pressable onPress={() => setSealed(!sealed)}>
               <Row>
                 <View style={{ width: 24, height: 24, borderRadius: 7, borderWidth: 2, borderColor: sealed ? colors.success : colors.border, backgroundColor: sealed ? colors.success : 'transparent', alignItems: 'center', justifyContent: 'center' }}>
-                  {sealed ? <Txt style={{ color: '#fff', fontWeight: '800', fontSize: 14 }}>✓</Txt> : null}
+                  {sealed ? <Icon name="checkmark" size={16} color="#fff" /> : null}
                 </View>
                 <Txt style={{ flex: 1 }}>
                   It's factory-sealed{getCategory(category!).edible ? ' and doesn’t need a fridge' : ''}
@@ -278,7 +279,7 @@ export default function ListItem() {
           {!quote ? (
             <Button
               label={pricing === 'loading' ? 'Checking prices…' : 'Get Lobb price'}
-              icon={pricing === 'loading' ? undefined : '✨'}
+              icon={pricing === 'loading' ? undefined : 'sparkles'}
               disabled={!ready || pricing === 'loading'}
               onPress={getPrice}
             />
@@ -356,7 +357,7 @@ function QuoteCard({ quote, kind, category, adjust, onAdjust, onList }: { quote:
         {quote.reason}
       </Txt>
       <AdjustRow item={preview} adjust={adjust} onAdjust={onAdjust} />
-      <Button label="List it" icon="🚀" kind="accent" onPress={onList} />
+      <Button label="List it" icon="rocket" kind="accent" onPress={onList} />
     </Card>
   );
 }

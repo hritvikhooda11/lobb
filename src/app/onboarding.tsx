@@ -2,13 +2,15 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useState } from 'react';
 import { KeyboardAvoidingView, Platform, Pressable, TextInput, View } from 'react-native';
 
-import { Button, Card, Pill, Row, Screen, Txt, tap } from '@/components/ui';
+import { Button, Card, Icon, Pill, Row, Screen, Txt, tap } from '@/components/ui';
 import { communities } from '@/data/catalog';
 import { attempt } from '@/lib/alert';
 import { useStore } from '@/store/app-store';
 import { fonts, radius, space, useTheme } from '@/theme';
 
-const isUwEmail = (e: string) => /^[^\s@]+@uw\.edu$/i.test(e.trim());
+// Release builds only accept @uw.edu. Dev builds accept any address so test domains
+// can be allowed temporarily; the database's allowed_email_domains is the real gate.
+const isUwEmail = (e: string) => (__DEV__ ? /^[^\s@]+@[^\s@]+\.[^\s@]+$/ : /^[^\s@]+@uw\.edu$/i).test(e.trim());
 
 export default function Onboarding() {
   const { colors } = useTheme();
@@ -44,7 +46,10 @@ export default function Onboarding() {
       <LinearGradient colors={[colors.primarySoft, colors.bg]} style={{ position: 'absolute', inset: 0, height: 420 }} />
       <Screen>
         <View style={{ marginTop: space.xxxl, marginBottom: space.xxl }}>
-          <Txt style={{ fontSize: 64, lineHeight: 70 }}>🙌📦</Txt>
+          <LinearGradient colors={[colors.primary, '#2A1A55']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={{ width: 64, height: 64, borderRadius: 20, alignItems: 'center', justifyContent: 'center', marginBottom: space.md }}>
+            <Icon name="bag-handle" size={32} color="#fff" />
+            <View style={{ position: 'absolute', right: 10, bottom: 10, width: 10, height: 10, borderRadius: 5, backgroundColor: colors.accent }} />
+          </LinearGradient>
           <Txt variant="hero" style={{ fontSize: 56, lineHeight: 58 }}>
             lobb<Txt variant="hero" tone="accent" style={{ fontSize: 56, lineHeight: 58 }}>.</Txt>
           </Txt>
@@ -127,7 +132,7 @@ export default function Onboarding() {
             })}
             <Button
               label={busy ? 'Saving…' : "Let's go"}
-              icon="🙌"
+              icon="arrow-forward"
               disabled={!communityId || busy}
               onPress={() => {
                 tap('success');
