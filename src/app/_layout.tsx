@@ -1,18 +1,50 @@
-import { DarkTheme, DefaultTheme, ThemeProvider } from 'expo-router';
+import { SpaceGrotesk_500Medium, SpaceGrotesk_700Bold, useFonts } from '@expo-google-fonts/space-grotesk';
+import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
-import { useColorScheme } from 'react-native';
+import { StatusBar } from 'expo-status-bar';
+import { useEffect } from 'react';
 
-import { AnimatedSplashOverlay } from '@/components/animated-icon';
-import AppTabs from '@/components/app-tabs';
+import { AppStoreProvider, useStore } from '@/store/app-store';
+import { useTheme } from '@/theme';
 
 SplashScreen.preventAutoHideAsync();
 
-export default function TabLayout() {
-  const colorScheme = useColorScheme();
+function RootStack() {
+  const { state } = useStore();
+  const { colors } = useTheme();
+  const signedIn = !!state.user;
   return (
-    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <AnimatedSplashOverlay />
-      <AppTabs />
+    <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.bg } }}>
+      <Stack.Protected guard={!signedIn}>
+        <Stack.Screen name="onboarding" />
+      </Stack.Protected>
+      <Stack.Protected guard={signedIn}>
+        <Stack.Screen name="(tabs)" />
+        <Stack.Screen name="item/[id]" options={{ presentation: 'formSheet', sheetAllowedDetents: [0.72, 1], sheetGrabberVisible: true, sheetCornerRadius: 28 }} />
+        <Stack.Screen name="request/[id]" options={{ gestureEnabled: false }} />
+        <Stack.Screen name="deliver/[id]" options={{ gestureEnabled: false }} />
+        <Stack.Screen name="report" options={{ presentation: 'modal' }} />
+      </Stack.Protected>
+    </Stack>
+  );
+}
+
+export default function RootLayout() {
+  const { dark, colors } = useTheme();
+  const [loaded] = useFonts({ SpaceGrotesk_500Medium, SpaceGrotesk_700Bold });
+
+  useEffect(() => {
+    if (loaded) SplashScreen.hideAsync();
+  }, [loaded]);
+  if (!loaded) return null;
+
+  const base = dark ? DarkTheme : DefaultTheme;
+  return (
+    <ThemeProvider value={{ ...base, colors: { ...base.colors, background: colors.bg, card: colors.surface, primary: colors.primary, text: colors.text, border: colors.border } }}>
+      <AppStoreProvider>
+        <StatusBar style={dark ? 'light' : 'dark'} />
+        <RootStack />
+      </AppStoreProvider>
     </ThemeProvider>
   );
 }

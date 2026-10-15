@@ -1,0 +1,46 @@
+# Knock — Road to the App Store
+
+## Stack (decided)
+| Layer | Choice | Why |
+|---|---|---|
+| App | **Expo (React Native) + TypeScript + Expo Router** | One codebase for iOS + Android, builds and App Store submission in the cloud via EAS |
+| Backend | **Supabase** (Postgres, Auth, Realtime, Storage, Edge Functions) | Email OTP for @uw.edu sign-in, realtime for live request status, storage for seal photos, row-level security |
+| Payments | **Stripe Connect (Express accounts)** | Marketplace payouts to students, handles 1099-K reporting. Physical goods/services are allowed outside Apple's in-app purchase (guideline 3.1.3(e)) |
+| Push | **Expo Notifications** | "Someone in your building wants a Coke" |
+| Camera | **expo-camera** | Barcode scan, seal photo, QR handoff scan |
+
+## Phase 0 — Prototype ✅ (done)
+- Design system (dark-first violet / lime), all core screens, buyer + seller flows, mocked data.
+- Request flow is 2 taps from home (rule: ≤ 3).
+
+## Phase 1 — Real backend
+- [ ] Supabase project; tables from PRODUCT_CONTEXT §16 with row-level security
+- [ ] @uw.edu email OTP sign-in; persist session
+- [ ] Item catalog seeded by UPC; eligibility flag enforced server-side
+- [ ] Requests via Realtime; **first-come-first-serve accept as a single atomic DB update** (no double-accepts)
+- [ ] Listed-seller priority window, then community broadcast (Edge Function + push)
+- [ ] Request expiry + deliverer 10-min deadline handled server-side (cron)
+- [ ] Replace `src/store/app-store.tsx` mocks with Supabase calls (screens stay as-is)
+
+## Phase 2 — Camera + trust
+- [ ] expo-camera barcode scan must match requested item's UPC
+- [ ] Seal photo upload to Storage
+- [ ] Single-use, short-lived signed QR token, verified server-side on scan
+- [ ] Ratings, reliability score, report/dispute queue
+
+## Phase 3 — Money
+- [ ] Stripe Connect onboarding for sellers; PaymentSheet for buyers
+- [ ] Authorize on accept → capture on QR scan → transfer to seller
+- [ ] Refund paths for cancel / expiry / disputes
+
+## Phase 4 — Ship
+- [ ] Apple Developer Program ($99/yr) — **you must enroll yourself**
+- [ ] App icon, splash, screenshots, privacy policy + terms URLs (UW Entrepreneurial Law Clinic review)
+- [ ] `eas build --profile preview` → TestFlight beta in one building
+- [ ] App Review notes: demo account, explain P2P model, sealed-goods-only rules, account deletion in-app (required)
+- [ ] `eas submit` to the App Store
+
+## Open decisions for the founder
+- Fee model: placeholder is 20% (min $0.75) to the deliverer plus a $0.25 platform fee, in `src/data/pricing.ts`. A $1.25 Coke costs $2.25 total.
+- Final name (Knock is the working name; check trademark/App Store availability).
+- Launch building.
