@@ -36,8 +36,8 @@ export default function ConfirmRequest() {
       </View>
       <Row gap={space.sm} style={{ marginTop: space.md, flexWrap: 'wrap' }}>
         {rent ? <Pill icon="repeat" label="Borrow & return" tone="warning" /> : <Pill icon="lock-closed" label="Factory sealed" tone="success" />}
-        <Pill label={`● ${item.nearbyCount} in your building`} tone="accent" />
-        <Pill label="⏱ ≤ 10 min" tone="primary" />
+        <Pill icon="people" label={`${item.nearbyCount} in your building`} tone="accent" />
+        <Pill icon="time" label="≤ 10 min" tone="primary" />
       </Row>
 
       {rent ? (

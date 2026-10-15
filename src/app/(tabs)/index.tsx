@@ -195,7 +195,7 @@ function SellMode() {
           {money(today)}
         </Txt>
         <Txt variant="caption" tone="onAccent" style={{ opacity: 0.7 }}>
-          {incoming.length} neighbors need something right now
+          {incoming.length} {incoming.length === 1 ? 'neighbor needs' : 'neighbors need'} something right now
         </Txt>
       </Card>
 

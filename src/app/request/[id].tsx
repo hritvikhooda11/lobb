@@ -76,7 +76,7 @@ export default function RequestStatusScreen() {
               Asking your neighbors…
             </Txt>
             <Txt tone="muted" center>
-              Sent to {item.nearbyCount} neighbors with it listed first, then everyone in {community?.name}. You're not charged until someone accepts.
+              Sent to {item.nearbyCount} {item.nearbyCount === 1 ? 'neighbor' : 'neighbors'} with it listed first, then everyone in {community?.name}. You're not charged until someone accepts.
             </Txt>
           </>
         ) : null}

@@ -260,8 +260,18 @@ function useAppState() {
   // ── Session ──────────────────────────────────────────────────────────────
 
   useEffect(() => {
+    let currentUser: string | null | undefined;
     const apply = async (userId: string | null, email: string | null) => {
-      setState((s) => ({ ...initialState, mode: s.mode, ready: false, userId, email }));
+      // Supabase re-emits SIGNED_IN whenever the app/tab regains focus. Resetting state then
+      // would unmount the navigator and throw people out of a live delivery, so for the same
+      // user just refresh quietly.
+      if (userId === currentUser) {
+        if (userId) refreshAll().catch(() => {});
+        return;
+      }
+      const firstLoad = currentUser === undefined;
+      currentUser = userId;
+      setState((s) => ({ ...initialState, mode: s.mode, ready: !firstLoad && s.ready, userId, email }));
       stateRef.current = { ...stateRef.current, userId, email };
       if (userId) {
         try {
