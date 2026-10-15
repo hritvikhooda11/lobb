@@ -5,7 +5,7 @@ import { Pressable, View } from 'react-native';
 
 import { BarcodeScanner } from '@/components/barcode-scanner';
 import { CountdownRing } from '@/components/live';
-import { Button, Card, ItemBadge, Pill, Row, Screen, Txt, tap } from '@/components/ui';
+import { Button, Card, Icon, ItemBadge, Pill, Row, Screen, StateBadge, Txt, tap, type IconName } from '@/components/ui';
 import { money } from '@/data/pricing';
 import { attempt, showError } from '@/lib/alert';
 import { takePhoto, type Photo } from '@/lib/photo';
@@ -87,7 +87,7 @@ export default function Deliver() {
 
       {job.status === 'delivered' ? (
         <View style={{ alignItems: 'center', marginTop: space.xxxl, gap: space.lg }}>
-          <Txt style={{ fontSize: 72, lineHeight: 86 }}>💸</Txt>
+          <StateBadge icon="cash" tone="success" />
           <Txt variant="hero" tone="success">
             +{money(job.earnings)}
           </Txt>
@@ -102,7 +102,7 @@ export default function Deliver() {
 
       {job.status === 'returned' ? (
         <View style={{ alignItems: 'center', marginTop: space.xxxl, gap: space.lg }}>
-          <Txt style={{ fontSize: 72, lineHeight: 86 }}>🤝</Txt>
+          <StateBadge icon="checkmark-done" tone="success" />
           <Txt variant="title" center>
             You got it back
           </Txt>
@@ -150,7 +150,7 @@ function SealCheck({ jobId, barcode }: { jobId: string; barcode?: string }) {
       <Txt variant="title">Verify the seal</Txt>
       <Txt tone="muted">Required before every delivery. Keeps everyone safe.</Txt>
       {barcode ? (
-        <StepCard done={scanned} icon="🔎" label="1. Scan the barcode" doneLabel="Barcode matches" onPress={() => setScannerOpen(true)} />
+        <StepCard done={scanned} icon="barcode-outline" label="1. Scan the barcode" doneLabel="Barcode matches" onPress={() => setScannerOpen(true)} />
       ) : (
         <Txt variant="caption" tone="muted">
           This item has no barcode on file, so just snap the seal.
@@ -159,7 +159,7 @@ function SealCheck({ jobId, barcode }: { jobId: string; barcode?: string }) {
       <PhotoStep label={barcode ? '2. Photo of the intact seal' : 'Photo of the intact seal'} hint="Show the factory seal clearly" disabled={!scanned} photo={photo} onPhoto={setPhoto} />
       <Button
         label={busy ? 'Saving…' : "I'm heading out"}
-        icon="🏃"
+        icon="walk"
         kind="accent"
         disabled={!scanned || !photo?.base64 || busy}
         onPress={async () => {
@@ -198,7 +198,7 @@ function ConditionCheck({ jobId }: { jobId: string }) {
       <PhotoStep label="Photo of the item" hint="Show any scratches or wear" photo={photo} onPhoto={setPhoto} />
       <Button
         label={busy ? 'Saving…' : "I'm heading out"}
-        icon="🏃"
+        icon="walk"
         kind="accent"
         disabled={!photo?.base64 || busy}
         onPress={async () => {
@@ -224,7 +224,10 @@ function Handoff({ job }: { job: Job }) {
     <View style={{ marginTop: space.xl, gap: space.md }}>
       <Txt variant="title">{arrived ? `Hand it to ${job.buyerName}` : `Head to ${job.buyerName}`}</Txt>
       <Card>
-        <Txt variant="label">📍 {job.location}</Txt>
+        <Row gap={6}>
+          <Icon name="location" size={16} tone="primary" />
+          <Txt variant="label">{job.location}</Txt>
+        </Row>
         <Txt variant="caption" tone="muted" style={{ marginTop: 4 }}>
           {job.buyerName} will show a QR code. Scan it, then snap a quick photo of the handoff.
         </Txt>
@@ -232,7 +235,7 @@ function Handoff({ job }: { job: Job }) {
       {!arrived ? (
         <Button
           label={busy ? 'Letting them know…' : "I'm at their door"}
-          icon="🚪"
+          icon="home"
           disabled={busy}
           onPress={async () => {
             setBusy(true);
@@ -241,12 +244,12 @@ function Handoff({ job }: { job: Job }) {
           }}
         />
       ) : null}
-      <StepCard done={!!code} icon="📷" label={`1. Scan ${job.buyerName}'s QR`} doneLabel={`Code ${code} ready`} onPress={() => setScannerOpen(true)} />
+      <StepCard done={!!code} icon="qr-code-outline" label={`1. Scan ${job.buyerName}'s QR`} doneLabel={`Code ${code} ready`} onPress={() => setScannerOpen(true)} />
       <PhotoStep label="2. Quick photo of the handoff" hint="The item in their hands, or at the door" disabled={!code} photo={photo} onPhoto={setPhoto} />
       <Button
         label={busy ? 'Confirming…' : 'Complete handoff'}
         kind="accent"
-        icon="✅"
+        icon="checkmark-circle"
         disabled={!code || !photo?.base64 || busy}
         onPress={async () => {
           setBusy(true);
@@ -278,7 +281,7 @@ function ReturnScan({ job }: { job: Job }) {
     <View style={{ marginTop: space.xl, gap: space.md }}>
       <Txt variant="title">{job.buyerName} is returning it</Txt>
       <Txt tone="muted">Check it’s in the same condition, then scan their return QR code.</Txt>
-      <Button label={busy ? 'Confirming…' : 'Scan return QR'} icon="📷" kind="accent" disabled={busy} onPress={() => setScannerOpen(true)} />
+      <Button label={busy ? 'Confirming…' : 'Scan return QR'} icon="qr-code" kind="accent" disabled={busy} onPress={() => setScannerOpen(true)} />
       <BarcodeScanner
         mode="handoff"
         visible={scannerOpen}
@@ -295,12 +298,12 @@ function ReturnScan({ job }: { job: Job }) {
   );
 }
 
-function StepCard({ done, icon, label, doneLabel, onPress }: { done: boolean; icon: string; label: string; doneLabel: string; onPress: () => void }) {
+function StepCard({ done, icon, label, doneLabel, onPress }: { done: boolean; icon: IconName; label: string; doneLabel: string; onPress: () => void }) {
   const { colors } = useTheme();
   return (
     <Card highlight={done} style={done && { backgroundColor: colors.successSoft, borderColor: colors.success }} onPress={done ? undefined : onPress}>
       <Row>
-        <Txt style={{ fontSize: 26 }}>{done ? '✅' : icon}</Txt>
+        <Icon name={done ? 'checkmark-circle' : icon} size={26} tone={done ? 'success' : 'primary'} />
         <Txt style={{ flex: 1, fontFamily: fonts.displayMedium, fontSize: 16, color: done ? colors.success : colors.text }}>{done ? doneLabel : label}</Txt>
       </Row>
     </Card>
@@ -325,7 +328,7 @@ function PhotoStep({ label, hint, photo, onPhoto, disabled }: { label: string; h
             }
       }>
       <Row>
-        {photo ? <Image source={{ uri: photo.uri }} style={{ width: 40, height: 40, borderRadius: 8 }} contentFit="cover" /> : <Txt style={{ fontSize: 26 }}>📸</Txt>}
+        {photo ? <Image source={{ uri: photo.uri }} style={{ width: 40, height: 40, borderRadius: 8 }} contentFit="cover" /> : <Icon name="camera-outline" size={26} tone="primary" />}
         <View style={{ flex: 1 }}>
           <Txt style={{ fontFamily: fonts.displayMedium, fontSize: 16, color: photo ? colors.success : colors.text }}>{photo ? 'Photo ready · tap to retake' : label}</Txt>
           {!photo ? (

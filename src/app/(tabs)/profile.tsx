@@ -23,8 +23,8 @@ export default function Profile() {
         </View>
         <Txt variant="title">{user.name}</Txt>
         <Row gap={space.sm}>
-          <Pill label="✓ UW verified" tone="success" />
-          <Pill label={`📍 ${community?.name}`} tone="primary" />
+          <Pill icon="checkmark-circle" label="UW verified" tone="success" />
+          <Pill icon="location" label={community?.name ?? ''} tone="primary" />
         </Row>
       </View>
 

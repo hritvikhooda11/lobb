@@ -30,7 +30,7 @@ const palette = {
   ink800: '#221B2E',
   ink700: '#2E2640',
   ink400: '#A79FBD',
-  paper50: '#FAF8FF',
+  paper50: '#F6F5FA',
   paper100: '#F1EDFA',
   paper200: '#E4DEF2',
   paper600: '#6B6383',

@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Modal, Platform, Pressable, StyleSheet, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { Button, Txt, tap } from '@/components/ui';
+import { Button, Icon, Txt, tap } from '@/components/ui';
 import { radius, space, useTheme } from '@/theme';
 
 const PRODUCT_BARCODES = ['ean13', 'ean8', 'upc_a', 'upc_e'] as const;
@@ -128,9 +128,9 @@ export function BarcodeScanner({
               <ActivityIndicator color={colors.accent} />
             ) : (
               <>
-                <Txt style={{ fontSize: 48, lineHeight: 56 }} center>
-                  🔢
-                </Txt>
+                <View style={{ alignItems: 'center' }}>
+                  <Icon name="keypad" size={44} color="#fff" />
+                </View>
                 <Txt variant="heading" style={{ color: '#fff' }} center>
                   {cameraAvailable && permission && !permission.granted ? 'Camera access is off' : 'No camera here'}
                 </Txt>
