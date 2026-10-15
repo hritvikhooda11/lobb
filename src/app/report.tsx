@@ -2,7 +2,7 @@ import { router } from 'expo-router';
 import { useState } from 'react';
 import { TextInput, View } from 'react-native';
 
-import { Button, Card, Row, Screen, StateBadge, Txt } from '@/components/ui';
+import { Button, Card, Icon, Row, Screen, StateBadge, Txt } from '@/components/ui';
 import { radius, space, useTheme } from '@/theme';
 
 const REASONS = ['Wrong item', 'Seal was broken', 'Never arrived', 'Buyer no-show', 'Safety concern', 'Something else'];
@@ -41,7 +41,7 @@ export default function Report() {
           <Card key={r} highlight={r === reason} onPress={() => setReason(r)} style={[{ paddingVertical: space.md }, r === reason && { backgroundColor: colors.primarySoft }]}>
             <Row>
               <Txt style={{ flex: 1 }}>{r}</Txt>
-              <Txt tone="primary">{r === reason ? '●' : '○'}</Txt>
+              <Icon name={r === reason ? 'radio-button-on' : 'radio-button-off'} size={22} tone="primary" />
             </Row>
           </Card>
         ))}
