@@ -2,8 +2,8 @@ import { useEffect, useRef } from 'react';
 import { Animated, Easing, View } from 'react-native';
 import Svg, { Circle } from 'react-native-svg';
 
-import { Button, Row, Txt } from '@/components/ui';
-import { fonts, radius, space, useTheme } from '@/theme';
+import { Row, Txt } from '@/components/ui';
+import { fonts, space, useTheme } from '@/theme';
 
 export const formatClock = (ms: number) => {
   const total = Math.max(0, Math.ceil(ms / 1000));
@@ -112,19 +112,6 @@ export function StatusSteps({ step, steps = BUY_STEPS }: { step: number; steps?:
           </Txt>
         ))}
       </Row>
-    </View>
-  );
-}
-
-/** Buttons that stand in for the other side of the transaction until there is a backend. */
-export function DemoControls({ label, onPress }: { label: string; onPress: () => void }) {
-  const { colors } = useTheme();
-  return (
-    <View style={{ marginTop: space.xxl, padding: space.md, borderRadius: radius.md, borderWidth: 1, borderStyle: 'dashed', borderColor: colors.border, gap: space.sm }}>
-      <Txt variant="caption" tone="muted" center>
-        DEV ONLY · stands in for the other person's phone
-      </Txt>
-      <Button label={label} kind="ghost" onPress={onPress} style={{ height: 46 }} />
     </View>
   );
 }

@@ -10,7 +10,9 @@ import { BarcodeScanner } from '@/components/barcode-scanner';
 import { Button, Card, ItemBadge, Pill, Row, Txt, tap } from '@/components/ui';
 import { canRent, categories, findByBarcode, findDuplicate, getCategory, type CategoryId, type Item, type ItemKind } from '@/data/catalog';
 import { MAX_ADJUST_PCT, money, rentPerDay, sellerEarnings } from '@/data/pricing';
+import { attempt, showError } from '@/lib/alert';
 import { takePhoto, type Photo } from '@/lib/photo';
+import { supabase } from '@/lib/supabase';
 import { useStore } from '@/store/app-store';
 import { fonts, radius, space, useTheme } from '@/theme';
 
@@ -74,9 +76,10 @@ export default function ListItem() {
     if (!ready) return;
     setPricing('loading');
     try {
+      const { data } = await supabase.auth.getSession();
       const res = await fetch('/api/price', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${data.session?.access_token ?? ''}` },
         body: JSON.stringify({
           name: name.trim(),
           category,
@@ -90,26 +93,24 @@ export default function ListItem() {
       setQuote(await res.json());
       tap('success');
     } catch {
-      setQuote({
-        name: name.trim(),
-        size: '',
-        retailPriceCents: 199,
-        source: 'Lobb estimate',
-        eligible: true,
-        reason: 'Couldn’t reach the pricing service, so this is a rough estimate.',
-        estimated: true,
-      });
+      showError('Couldn’t reach the Lobb pricing service. Check your connection and try again.');
     } finally {
       setPricing('idle');
     }
   }
 
-  function listNew() {
+  async function listNew() {
     if (!quote || !photo || !category) return;
-    actions.createItem(
-      { name: quote.name || name.trim(), size: quote.size || (scan?.found ? scan.size : ''), category, kind, marketPrice: quote.retailPriceCents, photoUri: photo.uri, barcode: scan?.barcode },
-      adjust,
+    if (!quote.quoteId) {
+      showError('The pricing service isn’t connected to the database yet (SUPABASE_SERVICE_ROLE_KEY missing), so new items can’t be saved.');
+      return;
+    }
+    setPricing('loading');
+    const ok = await attempt(() =>
+      actions.createItem({ quoteId: quote.quoteId!, size: quote.size || (scan?.found ? scan.size : ''), barcode: scan?.barcode, photo }, adjust),
     );
+    setPricing('idle');
+    if (!ok) return;
     tap('success');
     router.back();
   }
@@ -320,8 +321,8 @@ function DuplicateCard({ item, existingListing }: { item: Item; existingListing:
       <Button
         label={existingListing ? 'Add one more of mine' : 'Add mine to this listing'}
         kind="accent"
-        onPress={() => {
-          actions.addListing(item.id, adjust);
+        onPress={async () => {
+          if (!(await attempt(() => actions.addListing(item.id, adjust)))) return;
           tap('success');
           router.back();
         }}

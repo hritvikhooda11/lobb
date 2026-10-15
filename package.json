@@ -6,6 +6,9 @@
     "@anthropic-ai/sdk": "^0.134.0",
     "@expo-google-fonts/space-grotesk": "^0.4.1",
     "@expo/ui": "~57.0.24",
+    "@react-native-async-storage/async-storage": "2.2.0",
+    "@supabase/supabase-js": "^2.117.3",
+    "base64-arraybuffer": "^1.0.2",
     "expo": "~57.0.29",
     "expo-camera": "~57.0.6",
     "expo-constants": "~57.0.22",
@@ -38,6 +41,7 @@
     "zod": "^4.6.7"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.5.10",
     "@types/react": "~19.2.2",
     "eslint": "^9.0.0",
     "eslint-config-expo": "~57.0.2",
@@ -49,7 +53,8 @@
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
-    "lint": "expo lint"
+    "lint": "expo lint",
+    "test:db": "node supabase/tests/flows.test.mjs"
   },
   "private": true
 }

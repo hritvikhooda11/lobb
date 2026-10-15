@@ -3,7 +3,10 @@ import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
+import { ActivityIndicator, View } from 'react-native';
 
+import { SetupNeeded } from '@/components/setup-needed';
+import { supabaseConfigured } from '@/lib/supabase';
 import { AppStoreProvider, useStore } from '@/store/app-store';
 import { useTheme } from '@/theme';
 
@@ -12,7 +15,14 @@ SplashScreen.preventAutoHideAsync();
 function RootStack() {
   const { state } = useStore();
   const { colors } = useTheme();
-  const signedIn = !!state.user;
+  if (!state.ready) {
+    return (
+      <View style={{ flex: 1, backgroundColor: colors.bg, alignItems: 'center', justifyContent: 'center' }}>
+        <ActivityIndicator color={colors.primary} />
+      </View>
+    );
+  }
+  const signedIn = !!state.userId && !!state.profile?.communityId;
   return (
     <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.bg } }}>
       <Stack.Protected guard={!signedIn}>
@@ -42,10 +52,14 @@ export default function RootLayout() {
   const base = dark ? DarkTheme : DefaultTheme;
   return (
     <ThemeProvider value={{ ...base, colors: { ...base.colors, background: colors.bg, card: colors.surface, primary: colors.primary, text: colors.text, border: colors.border } }}>
-      <AppStoreProvider>
-        <StatusBar style={dark ? 'light' : 'dark'} />
-        <RootStack />
-      </AppStoreProvider>
+      <StatusBar style={dark ? 'light' : 'dark'} />
+      {supabaseConfigured ? (
+        <AppStoreProvider>
+          <RootStack />
+        </AppStoreProvider>
+      ) : (
+        <SetupNeeded />
+      )}
     </ThemeProvider>
   );
 }

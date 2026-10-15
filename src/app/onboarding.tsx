@@ -1,9 +1,10 @@
 import { LinearGradient } from 'expo-linear-gradient';
 import { useState } from 'react';
-import { KeyboardAvoidingView, Platform, TextInput, View } from 'react-native';
+import { KeyboardAvoidingView, Platform, Pressable, TextInput, View } from 'react-native';
 
 import { Button, Card, Pill, Row, Screen, Txt, tap } from '@/components/ui';
 import { communities } from '@/data/catalog';
+import { attempt } from '@/lib/alert';
 import { useStore } from '@/store/app-store';
 import { fonts, radius, space, useTheme } from '@/theme';
 
@@ -11,10 +12,32 @@ const isUwEmail = (e: string) => /^[^\s@]+@uw\.edu$/i.test(e.trim());
 
 export default function Onboarding() {
   const { colors } = useTheme();
-  const { actions } = useStore();
-  const [step, setStep] = useState<'email' | 'community'>('email');
+  const { state, actions } = useStore();
   const [email, setEmail] = useState('');
+  const [code, setCode] = useState('');
+  const [codeSent, setCodeSent] = useState(false);
+  const [busy, setBusy] = useState(false);
   const [communityId, setCommunityId] = useState<string | null>(null);
+
+  const step = state.userId ? 'community' : codeSent ? 'code' : 'email';
+
+  const run = async (fn: () => Promise<unknown>) => {
+    setBusy(true);
+    const ok = await attempt(fn);
+    setBusy(false);
+    return ok;
+  };
+
+  const inputStyle = (active: boolean) => ({
+    height: 56,
+    borderRadius: radius.lg,
+    borderWidth: 1.5,
+    borderColor: active ? colors.primary : colors.border,
+    backgroundColor: colors.surface,
+    color: colors.text,
+    paddingHorizontal: space.lg,
+    fontSize: 17,
+  });
 
   return (
     <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
@@ -41,23 +64,51 @@ export default function Onboarding() {
               autoCapitalize="none"
               autoComplete="email"
               keyboardType="email-address"
-              style={{
-                height: 56,
-                borderRadius: radius.lg,
-                borderWidth: 1.5,
-                borderColor: isUwEmail(email) ? colors.primary : colors.border,
-                backgroundColor: colors.surface,
-                color: colors.text,
-                paddingHorizontal: space.lg,
-                fontSize: 17,
-              }}
+              style={inputStyle(isUwEmail(email))}
             />
             <Txt variant="caption" tone="muted">
-              Only @uw.edu addresses, so everyone in your building is a verified student.
+              Only @uw.edu addresses, so everyone in your building is a verified student. We’ll email you a 6-digit code.
             </Txt>
-            <Button label="Continue" disabled={!isUwEmail(email)} onPress={() => setStep('community')} style={{ marginTop: space.sm }} />
+            <Button
+              label={busy ? 'Sending…' : 'Email me a code'}
+              disabled={!isUwEmail(email) || busy}
+              onPress={() => run(() => actions.sendCode(email)).then((ok) => ok && setCodeSent(true))}
+              style={{ marginTop: space.sm }}
+            />
           </View>
-        ) : (
+        ) : null}
+
+        {step === 'code' ? (
+          <View style={{ gap: space.md }}>
+            <Txt variant="label">Enter the code we sent to {email.trim().toLowerCase()}</Txt>
+            <TextInput
+              value={code}
+              onChangeText={(t) => setCode(t.replace(/\D/g, '').slice(0, 6))}
+              placeholder="123456"
+              placeholderTextColor={colors.textMuted}
+              keyboardType="number-pad"
+              autoComplete="one-time-code"
+              textContentType="oneTimeCode"
+              autoFocus
+              style={[inputStyle(code.length === 6), { fontFamily: fonts.display, fontSize: 28, letterSpacing: 8, textAlign: 'center' }]}
+            />
+            <Button label={busy ? 'Checking…' : 'Sign in'} disabled={code.length !== 6 || busy} onPress={() => run(() => actions.verifyCode(email, code))} />
+            <Row style={{ justifyContent: 'space-between' }}>
+              <Pressable onPress={() => setCodeSent(false)} hitSlop={8}>
+                <Txt variant="caption" tone="primary">
+                  Use a different email
+                </Txt>
+              </Pressable>
+              <Pressable onPress={() => run(() => actions.sendCode(email))} hitSlop={8}>
+                <Txt variant="caption" tone="primary">
+                  Resend code
+                </Txt>
+              </Pressable>
+            </Row>
+          </View>
+        ) : null}
+
+        {step === 'community' ? (
           <View style={{ gap: space.md }}>
             <Txt variant="heading">Where do you live?</Txt>
             <Txt variant="body" tone="muted">
@@ -68,30 +119,24 @@ export default function Onboarding() {
               return (
                 <Card key={c.id} highlight={selected} onPress={() => setCommunityId(c.id)} style={selected && { backgroundColor: colors.primarySoft }}>
                   <Row style={{ justifyContent: 'space-between' }}>
-                    <View style={{ gap: 4 }}>
-                      <Txt style={{ fontFamily: fonts.displayMedium, fontSize: 17 }}>{c.name}</Txt>
-                      <Txt variant="caption" tone="muted">
-                        {c.members.toLocaleString()} neighbors on Lobb
-                      </Txt>
-                    </View>
+                    <Txt style={{ fontFamily: fonts.displayMedium, fontSize: 17 }}>{c.name}</Txt>
                     <Pill label={c.type} tone={selected ? 'primary' : 'default'} />
                   </Row>
                 </Card>
               );
             })}
             <Button
-              label="Let's go"
+              label={busy ? 'Saving…' : "Let's go"}
               icon="🙌"
-              disabled={!communityId}
+              disabled={!communityId || busy}
               onPress={() => {
                 tap('success');
-                const name = email.split('@')[0];
-                actions.signIn({ name: name.charAt(0).toUpperCase() + name.slice(1), email: email.trim().toLowerCase(), communityId: communityId! });
+                run(() => actions.setCommunity(communityId!));
               }}
               style={{ marginTop: space.sm }}
             />
           </View>
-        )}
+        ) : null}
       </Screen>
     </KeyboardAvoidingView>
   );

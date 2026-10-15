@@ -75,6 +75,9 @@ export const catalog: Item[] = [
   { id: 'iron', kind: 'rent', name: 'Steam iron', size: 'Clothes iron', category: 'household', emoji: '👔', image: require('@/assets/items/iron.jpg'), marketPrice: 2999, nearbyCount: 2 },
 ];
 
+/** The bundled photo/emoji for a seeded catalog item (the database stores everything else). */
+export const bundledItem = (id: string) => catalog.find((i) => i.id === id);
+
 export type Community = { id: string; name: string; type: 'dorm' | 'high-rise' | 'apartment'; members: number };
 
 export const communities: Community[] = [

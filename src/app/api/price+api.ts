@@ -12,6 +12,7 @@ import { z } from 'zod';
 
 import { categories, type CategoryId, type ItemKind } from '@/data/catalog';
 import { fallbackRetailPrice } from '@/data/pricing';
+import { supabaseAdmin, userIdFromRequest } from '@/lib/supabase-admin';
 
 export type PriceRequest = { name: string; category: CategoryId; kind: ItemKind; barcode?: string; imageBase64?: string; imageUrl?: string };
 
@@ -23,6 +24,8 @@ export type PriceResponse = {
   eligible: boolean;
   reason: string;
   estimated: boolean;
+  /** Server-issued quote id; the database only creates items from a quote. */
+  quoteId?: string;
 };
 
 const PriceResult = z.object({
@@ -41,7 +44,7 @@ NEVER allowed: alcohol, tobacco, vapes, cannabis, medications or supplements, we
 
 const client = new Anthropic();
 
-export async function POST(request: Request) {
+export async function POST(request: Request): Promise<Response> {
   let body: PriceRequest;
   try {
     body = await request.json();
@@ -54,7 +57,7 @@ export async function POST(request: Request) {
     return Response.json({ error: 'name, category and kind are required' }, { status: 400 });
   }
 
-  if (!process.env.ANTHROPIC_API_KEY) return Response.json(offlineEstimate(name, category.id));
+  if (!process.env.ANTHROPIC_API_KEY) return withQuote(request, body, offlineEstimate(name, category.id));
 
   const content: Anthropic.Beta.BetaContentBlockParam[] = [];
   if (body.imageBase64) {
@@ -94,12 +97,12 @@ Search the web for the typical current US retail price of one unit, then decide 
     }
 
     if (response.stop_reason === 'refusal') {
-      return Response.json({ ...offlineEstimate(name, category.id), eligible: false, reason: 'This item can’t be listed on Lobb.' } satisfies PriceResponse);
+      return withQuote(request, body, { ...offlineEstimate(name, category.id), eligible: false, reason: 'This item can’t be listed on Lobb.' });
     }
     const result = response.parsed_output;
-    if (!result) return Response.json(offlineEstimate(name, category.id));
+    if (!result) return withQuote(request, body, offlineEstimate(name, category.id));
 
-    return Response.json({
+    return withQuote(request, body, {
       name: result.name,
       size: result.size,
       retailPriceCents: Math.max(25, Math.round(result.retail_price_usd * 100)),
@@ -107,14 +110,27 @@ Search the web for the typical current US retail price of one unit, then decide 
       eligible: result.eligible,
       reason: result.reason,
       estimated: false,
-    } satisfies PriceResponse);
+    });
   } catch (error) {
     if (error instanceof Anthropic.AuthenticationError) console.error('[price] Invalid ANTHROPIC_API_KEY');
     else if (error instanceof Anthropic.RateLimitError) console.error('[price] Rate limited');
     else if (error instanceof Anthropic.APIError) console.error(`[price] API error ${error.status}: ${error.message}`);
     else console.error('[price]', error);
-    return Response.json(offlineEstimate(name, category.id));
+    return withQuote(request, body, offlineEstimate(name, category.id));
   }
+}
+
+/** Records the quote in the database (when Supabase is configured) so create_item() can trust the price. */
+async function withQuote(request: Request, body: PriceRequest, quote: PriceResponse): Promise<Response> {
+  const userId = await userIdFromRequest(request);
+  if (!supabaseAdmin || !userId) return Response.json(quote);
+  const { data, error } = await supabaseAdmin
+    .from('price_quotes')
+    .insert({ user_id: userId, kind: body.kind, name: quote.name, size: quote.size, category: body.category, market_price: quote.retailPriceCents, eligible: quote.eligible })
+    .select('id')
+    .single();
+  if (error) console.error('[price] could not save quote', error.message);
+  return Response.json({ ...quote, quoteId: data?.id } satisfies PriceResponse);
 }
 
 function offlineEstimate(name: string, category: CategoryId): PriceResponse {

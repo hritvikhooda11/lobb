@@ -5,6 +5,7 @@ import { Pressable, ScrollView, Switch, TextInput, View } from 'react-native';
 import { Button, Card, ItemBadge, ItemPhoto, Pill, Row, Screen, SectionHeader, Txt, tap } from '@/components/ui';
 import { canRent, categories, communities, type CategoryId, type ItemKind } from '@/data/catalog';
 import { money, priceFor, rentPerDay, sellerEarnings } from '@/data/pricing';
+import { attempt } from '@/lib/alert';
 import { LIVE_STATUSES, useItem, useStore } from '@/store/app-store';
 import { fonts, radius, space, useTheme } from '@/theme';
 
@@ -14,7 +15,7 @@ const TITLES: Record<Mode, string> = { buy: 'What do you need?', rent: 'Borrow i
 
 export default function Home() {
   const { state, actions } = useStore();
-  const community = communities.find((c) => c.id === state.user?.communityId);
+  const community = communities.find((c) => c.id === state.profile?.communityId);
   return (
     <Screen>
       <Txt variant="caption" tone="muted">
@@ -178,7 +179,7 @@ function SellMode() {
   const { colors } = useTheme();
   const { state, actions } = useStore();
   const incoming = state.jobs.filter((j) => j.status === 'incoming');
-  const active = state.jobs.find((j) => j.status === 'accepted' || j.status === 'verified');
+  const active = state.jobs.find((j) => ['accepted', 'verified', 'arrived', 'returning'].includes(j.status));
   const today = state.wallet.filter((w) => Date.now() - w.at < 24 * 3600_000).reduce((s, w) => s + w.amount, 0);
   const activeItem = useItem(active?.itemId);
 
@@ -203,7 +204,7 @@ function SellMode() {
           <Row>
             <ItemBadge item={activeItem} size={44} />
             <View style={{ flex: 1 }}>
-              <Txt variant="label">{active.kind === 'rent' ? 'Lending in progress' : 'Delivery in progress'}</Txt>
+              <Txt variant="label">{active.status === 'returning' ? `${active.buyerName} is returning it` : active.kind === 'rent' ? 'Lending in progress' : 'Delivery in progress'}</Txt>
               <Txt variant="caption" tone="muted">
                 {active.buyerName} · {active.location}
               </Txt>
@@ -265,9 +266,8 @@ function IncomingCard({ jobId, blocked }: { jobId: string; blocked: boolean }) {
           label="Accept · 10 min"
           kind="accent"
           disabled={blocked}
-          onPress={() => {
-            actions.acceptJob(job.id);
-            router.push({ pathname: '/deliver/[id]', params: { id: job.id } });
+          onPress={async () => {
+            if (await attempt(() => actions.acceptJob(job.id))) router.push({ pathname: '/deliver/[id]', params: { id: job.id } });
           }}
           style={{ flex: 2, height: 46 }}
         />
@@ -297,7 +297,7 @@ function ListingRow({ itemId }: { itemId: string }) {
           </Txt>
         </View>
         {item.kind === 'rent' ? <Pill label="RENT" tone="warning" /> : null}
-        <Switch value={l.active} onValueChange={() => actions.toggleListing(l.itemId)} trackColor={{ true: colors.accent, false: colors.surfaceHigh }} thumbColor="#fff" />
+        <Switch value={l.active} onValueChange={() => void attempt(() => actions.toggleListing(l.itemId))} trackColor={{ true: colors.accent, false: colors.surfaceHigh }} thumbColor="#fff" />
       </Row>
     </Card>
   );
