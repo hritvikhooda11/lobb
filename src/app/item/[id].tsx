@@ -1,12 +1,11 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
-import { ScrollView, TextInput, View } from 'react-native';
+import { Pressable, ScrollView, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { Button, Divider, ItemBadge, Pill, Row, Txt, tap } from '@/components/ui';
-import { getItem } from '@/data/catalog';
-import { money, priceFor } from '@/data/pricing';
-import { useStore } from '@/store/app-store';
+import { Button, Divider, ItemPhoto, Pill, Row, Txt, tap } from '@/components/ui';
+import { money, priceFor, rentalDurations, rentalPriceFor } from '@/data/pricing';
+import { LIVE_STATUSES, useItem, useStore } from '@/store/app-store';
 import { radius, space, useTheme } from '@/theme';
 
 export default function ConfirmRequest() {
@@ -15,34 +14,76 @@ export default function ConfirmRequest() {
   const insets = useSafeAreaInsets();
   const { state, actions } = useStore();
   const [note, setNote] = useState('My door');
-  const item = getItem(id);
+  const [durationId, setDurationId] = useState(rentalDurations[1].id);
+  const item = useItem(id);
   if (!item) return null;
+
+  const rent = item.kind === 'rent';
+  const duration = rentalDurations.find((d) => d.id === durationId)!;
   const price = priceFor(item);
-  const hasLive = state.requests.some((r) => ['open', 'accepted', 'arriving'].includes(r.status));
+  const rental = rentalPriceFor(item, duration);
+  const total = rent ? rental.total : price.total;
+  const hasLive = state.requests.some((r) => LIVE_STATUSES.includes(r.status));
 
   return (
     <ScrollView style={{ backgroundColor: colors.bg }} contentContainerStyle={{ padding: space.xl, paddingBottom: insets.bottom + space.xl }}>
-      <Row gap={space.lg}>
-        <ItemBadge item={item} size={84} />
-        <View style={{ flex: 1, gap: 6 }}>
-          <Txt variant="title">{item.name}</Txt>
-          <Txt tone="muted">{item.size}</Txt>
-        </View>
-      </Row>
-      <Row gap={space.sm} style={{ marginTop: space.lg, flexWrap: 'wrap' }}>
-        <Pill label="🔒 Factory sealed" tone="success" />
+      <ItemPhoto item={item} height={200} radius={radius.lg} />
+      <View style={{ marginTop: space.lg, gap: 4 }}>
+        <Txt variant="title">{item.name}</Txt>
+        <Txt tone="muted">{item.size}</Txt>
+      </View>
+      <Row gap={space.sm} style={{ marginTop: space.md, flexWrap: 'wrap' }}>
+        {rent ? <Pill label="🔁 Borrow & return" tone="warning" /> : <Pill label="🔒 Factory sealed" tone="success" />}
         <Pill label={`● ${item.nearbyCount} in your building`} tone="accent" />
         <Pill label="⏱ ≤ 10 min" tone="primary" />
       </Row>
 
+      {rent ? (
+        <View style={{ marginTop: space.xl, gap: space.sm }}>
+          <Txt variant="label">How long?</Txt>
+          <Row gap={space.sm}>
+            {rentalDurations.map((d) => {
+              const active = d.id === durationId;
+              return (
+                <Pressable
+                  key={d.id}
+                  onPress={() => {
+                    tap();
+                    setDurationId(d.id);
+                  }}
+                  style={{ flex: 1, paddingVertical: space.md, borderRadius: radius.md, alignItems: 'center', backgroundColor: active ? colors.primarySoft : colors.surface, borderWidth: 1.5, borderColor: active ? colors.primary : colors.border }}>
+                  <Txt variant="label" tone={active ? 'primary' : 'default'}>
+                    {d.label}
+                  </Txt>
+                  <Txt variant="caption" tone="muted">
+                    {money(rentalPriceFor(item, d).rent)}
+                  </Txt>
+                </Pressable>
+              );
+            })}
+          </Row>
+        </View>
+      ) : null}
+
       <View style={{ marginTop: space.xl, backgroundColor: colors.surface, borderRadius: radius.lg, padding: space.lg, borderWidth: 1, borderColor: colors.border }}>
-        <PriceRow label="Item (store price)" value={money(price.item)} />
-        <PriceRow label="Your neighbor earns" value={money(price.deliverer)} tone="success" />
-        <PriceRow label="Knock fee" value={money(price.platform)} />
+        {rent ? (
+          <>
+            <PriceRow label={`Rent · ${duration.label}`} value={money(rental.rent)} tone="success" />
+            <PriceRow label="Lobb fee" value={money(rental.platform)} />
+          </>
+        ) : (
+          <>
+            <PriceRow label="Item (store price)" value={money(price.item)} />
+            <PriceRow label="Your neighbor earns" value={money(price.deliverer)} tone="success" />
+            <PriceRow label="Lobb fee" value={money(price.platform)} />
+          </>
+        )}
         <Divider />
-        <PriceRow label="Total" value={money(price.total)} bold />
+        <PriceRow label="Total" value={money(total)} bold />
         <Txt variant="caption" tone="muted" style={{ marginTop: space.sm }}>
-          Prices are set by Knock from retail prices. You're only charged once a neighbor accepts.
+          {rent
+            ? `We place a ${money(rental.hold)} hold on your card while you have it. It's released as soon as you return it.`
+            : 'Prices are set by Lobb from retail prices. You’re only charged once a neighbor accepts.'}
         </Txt>
       </View>
 
@@ -58,13 +99,13 @@ export default function ConfirmRequest() {
       />
 
       <Button
-        label={hasLive ? 'Finish your current request first' : `Knock · ${money(price.total)}`}
-        icon={hasLive ? undefined : '✊'}
+        label={hasLive ? 'Finish your current request first' : `${rent ? 'Borrow it' : 'Lobb it'} · ${money(total)}`}
+        icon={hasLive ? undefined : rent ? '🔁' : '🙌'}
         disabled={hasLive}
         style={{ marginTop: space.xl }}
         onPress={() => {
           tap('success');
-          const requestId = actions.createRequest(item.id, note.trim() || 'My door');
+          const requestId = actions.createRequest(item, note.trim() || 'My door', rent ? durationId : undefined);
           router.dismiss();
           router.push({ pathname: '/request/[id]', params: { id: requestId } });
         }}

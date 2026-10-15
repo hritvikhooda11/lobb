@@ -1,10 +1,10 @@
 /**
- * Knock design system.
+ * Lobb design system.
  *
  * Personality: fast, playful, late-night. Dark mode is the hero theme —
  * most requests happen at night during study crunch.
  *
- *  - Violet  = brand / primary actions ("Knock" button, selected states)
+ *  - Violet  = brand / primary actions ("Lobb it" button, selected states)
  *  - Lime    = money & go (earnings, accept, success moments). Always dark text on lime.
  *  - Coral   = urgency (countdown < 2 min, errors, cancel)
  *  - Amber   = waiting / warning
