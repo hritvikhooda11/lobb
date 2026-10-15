@@ -1,19 +1,20 @@
 {
   "expo": {
-    "name": "Knock",
-    "slug": "knock",
+    "name": "Lobb",
+    "slug": "lobb",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "knock",
+    "scheme": "lobb",
     "userInterfaceStyle": "automatic",
     "ios": {
       "icon": "./assets/expo.icon",
-      "bundleIdentifier": "com.knockapp.knock",
+      "bundleIdentifier": "com.lobbapp.lobb",
       "supportsTablet": false,
       "infoPlist": {
-        "NSCameraUsageDescription": "Knock uses the camera to scan item barcodes, photograph seals, and scan handoff QR codes.",
-        "ITSAppUsesNonExemptEncryption": false
+        "NSCameraUsageDescription": "Lobb uses the camera to photograph items you list, check seals, and scan handoff QR codes.",
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSPhotoLibraryUsageDescription": "Lobb lets you pick a photo of an item you want to list."
       }
     },
     "android": {
@@ -24,10 +25,10 @@
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
-      "package": "com.knockapp.knock"
+      "package": "com.lobbapp.lobb"
     },
     "web": {
-      "output": "static",
+      "output": "server",
       "favicon": "./assets/images/favicon.png"
     },
     "plugins": [

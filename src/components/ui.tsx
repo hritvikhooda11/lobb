@@ -1,3 +1,4 @@
+import { Image } from 'expo-image';
 import * as Haptics from 'expo-haptics';
 import type { ReactNode } from 'react';
 import { Platform, Pressable, ScrollView, StyleSheet, Text, View, type StyleProp, type TextStyle, type ViewStyle } from 'react-native';
@@ -144,12 +145,34 @@ export function Pill({ label, tone = 'default' }: { label: string; tone?: 'defau
   );
 }
 
-/** Square emoji badge tinted by category. */
+/** Item photo (falls back to an emoji tile tinted by category). */
 export function ItemBadge({ item, size = 56 }: { item: Item; size?: number }) {
   const tint = categoryTint[item.category];
+  const box = { width: size, height: size, borderRadius: size * 0.28 };
+  if (item.image) {
+    return (
+      <View style={[box, { backgroundColor: '#fff', overflow: 'hidden' }]}>
+        <Image source={item.image} style={{ width: '100%', height: '100%' }} contentFit="contain" transition={150} />
+      </View>
+    );
+  }
   return (
-    <View style={{ width: size, height: size, borderRadius: size * 0.32, backgroundColor: tint + '2E', alignItems: 'center', justifyContent: 'center' }}>
+    <View style={[box, { backgroundColor: tint + '2E', alignItems: 'center', justifyContent: 'center' }]}>
       <Text style={{ fontSize: size * 0.5 }}>{item.emoji}</Text>
+    </View>
+  );
+}
+
+/** Full-width item photo for grids and detail sheets. */
+export function ItemPhoto({ item, height = 120, radius: r = radius.md }: { item: Item; height?: number; radius?: number }) {
+  const tint = categoryTint[item.category];
+  return (
+    <View style={{ height, alignSelf: 'stretch', borderRadius: r, overflow: 'hidden', backgroundColor: item.image ? '#fff' : tint + '2E', alignItems: 'center', justifyContent: 'center' }}>
+      {item.image ? (
+        <Image source={item.image} style={{ width: '100%', height: '100%' }} contentFit="contain" transition={150} />
+      ) : (
+        <Text style={{ fontSize: height * 0.45 }}>{item.emoji}</Text>
+      )}
     </View>
   );
 }

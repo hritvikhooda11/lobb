@@ -24,6 +24,7 @@ function RootStack() {
         <Stack.Screen name="request/[id]" options={{ gestureEnabled: false }} />
         <Stack.Screen name="deliver/[id]" options={{ gestureEnabled: false }} />
         <Stack.Screen name="report" options={{ presentation: 'modal' }} />
+        <Stack.Screen name="list-item" options={{ presentation: 'modal' }} />
       </Stack.Protected>
     </Stack>
   );

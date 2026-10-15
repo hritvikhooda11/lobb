@@ -3,32 +3,42 @@ import { useEffect, useState } from 'react';
 import { Pressable, View } from 'react-native';
 import QRCode from 'react-native-qrcode-svg';
 
-import { CountdownRing, DemoControls, RadarPulse, StatusSteps } from '@/components/live';
-import { Button, Card, ItemBadge, Pill, Row, Screen, Txt, tap } from '@/components/ui';
-import { communities, getItem } from '@/data/catalog';
+import { BUY_STEPS, CountdownRing, DemoControls, RadarPulse, RENT_STEPS, StatusSteps } from '@/components/live';
+import { Button, Card, ItemBadge, ItemPhoto, Pill, Row, Screen, Txt, tap } from '@/components/ui';
+import { communities } from '@/data/catalog';
 import { money } from '@/data/pricing';
-import { DELIVERY_WINDOW_MS, useNow, useStore } from '@/store/app-store';
-import { radius, space, useTheme } from '@/theme';
+import { DELIVERY_WINDOW_MS, LIVE_STATUSES, useItem, useNow, useStore, type RequestStatus } from '@/store/app-store';
+import { fonts, radius, space, useTheme } from '@/theme';
 
 const goHome = () => (router.canGoBack() ? router.back() : router.replace('/'));
 
-export default function RequestStatus() {
+const STEP: Record<RequestStatus, number> = { open: 0, accepted: 1, arriving: 2, delivered: 3, renting: 2, returning: 2, returned: 3, expired: 0, cancelled: 0 };
+
+const formatDue = (ms: number) => {
+  if (ms <= 0) return 'Overdue';
+  const h = Math.floor(ms / 3600_000);
+  const m = Math.floor((ms % 3600_000) / 60_000);
+  return h > 0 ? `${h}h ${m}m` : `${m}m`;
+};
+
+export default function RequestStatusScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { state, actions } = useStore();
   const r = state.requests.find((x) => x.id === id);
-  const live = !!r && ['open', 'accepted', 'arriving'].includes(r.status);
-  const now = useNow(live);
+  const item = useItem(r?.itemId);
+  const now = useNow(!!r && LIVE_STATUSES.includes(r.status));
 
   const status = r?.status;
   useEffect(() => {
-    if (status === 'accepted' || status === 'arriving') tap('success');
+    if (status === 'accepted' || status === 'arriving' || status === 'renting') tap('success');
   }, [status]);
 
-  if (!r) return null;
-  const item = getItem(r.itemId)!;
+  if (!r || !item) return null;
+  const rent = r.kind === 'rent';
   const community = communities.find((c) => c.id === state.user?.communityId);
   const remaining = r.acceptedAt ? r.acceptedAt + DELIVERY_WINDOW_MS - now : DELIVERY_WINDOW_MS;
-  const step = { open: 0, accepted: 1, arriving: 2, delivered: 3, expired: 0, cancelled: 0 }[r.status];
+  const total = r.rental ? r.rental.total : r.price.total;
+  const name = r.deliverer?.name ?? 'Your neighbor';
 
   return (
     <Screen>
@@ -38,7 +48,7 @@ export default function RequestStatus() {
             ‹ Home
           </Txt>
         </Pressable>
-        <Pill label={money(r.price.total)} />
+        <Pill label={money(total)} />
       </Row>
 
       <Row style={{ marginTop: space.lg }}>
@@ -46,14 +56,14 @@ export default function RequestStatus() {
         <View style={{ flex: 1 }}>
           <Txt variant="heading">{item.name}</Txt>
           <Txt variant="caption" tone="muted">
-            {item.size} · meet at {r.locationNote}
+            {rent && r.rental ? `${r.rental.hours >= 24 ? `${r.rental.hours / 24} day` : `${r.rental.hours} hours`} rental` : item.size} · meet at {r.locationNote}
           </Txt>
         </View>
       </Row>
 
       {r.status !== 'cancelled' ? (
         <View style={{ marginTop: space.xl }}>
-          <StatusSteps step={step} />
+          <StatusSteps step={STEP[r.status]} steps={rent ? RENT_STEPS : BUY_STEPS} />
         </View>
       ) : null}
 
@@ -62,7 +72,7 @@ export default function RequestStatus() {
           <>
             <RadarPulse emoji={item.emoji} />
             <Txt variant="title" center>
-              Knocking on doors…
+              Asking your neighbors…
             </Txt>
             <Txt tone="muted" center>
               Sent to {item.nearbyCount} neighbors with it listed first, then everyone in {community?.name}. You're not charged until someone accepts.
@@ -72,19 +82,47 @@ export default function RequestStatus() {
 
         {r.status === 'accepted' ? (
           <>
-            <CountdownRing remainingMs={remaining} totalMs={DELIVERY_WINDOW_MS} caption={remaining > 0 ? 'until delivery' : 'running late'} />
-            <DelivererCard name={r.deliverer!.name} rating={r.deliverer!.rating} floor={r.deliverer!.floor} />
+            <CountdownRing remainingMs={remaining} totalMs={DELIVERY_WINDOW_MS} caption={remaining > 0 ? 'until it’s at your door' : 'running late'} />
+            <DelivererCard name={name} rating={r.deliverer!.rating} floor={r.deliverer!.floor} rent={rent} />
             {remaining <= 0 ? (
               <Txt tone="warning" center>
-                {r.deliverer!.name} is past the 10-minute window. Keep waiting or cancel for free.
+                {name} is past the 10-minute window. Keep waiting or cancel for free.
               </Txt>
             ) : null}
           </>
         ) : null}
 
-        {r.status === 'arriving' ? <HandoffQR token={r.qrToken} name={r.deliverer!.name} /> : null}
+        {r.status === 'arriving' ? (
+          <HandoffQR
+            token={r.qrToken}
+            title={`${name} is at your door 🚪`}
+            body={rent ? `Check it works, then let ${name} scan this. Your rental starts on scan.` : `Check the seal, then let ${name} scan this. Payment is released on scan.`}
+          />
+        ) : null}
 
-        {r.status === 'delivered' ? <Delivered requestId={r.id} name={r.deliverer!.name} rated={r.rating} /> : null}
+        {r.status === 'renting' && r.returnBy ? (
+          <>
+            <ItemPhoto item={item} height={160} radius={radius.lg} />
+            <View style={{ alignItems: 'center' }}>
+              <Txt variant="caption" tone="muted">
+                DUE BACK IN
+              </Txt>
+              <Txt style={{ fontFamily: fonts.display, fontSize: 44, lineHeight: 50 }}>{formatDue(r.returnBy - now)}</Txt>
+              <Txt variant="caption" tone="muted">
+                to {name} · {r.deliverer!.floor}
+              </Txt>
+            </View>
+            <Button label="Return it now" icon="↩️" onPress={() => actions.startReturn(r.id)} style={{ alignSelf: 'stretch' }} />
+            <Txt variant="caption" tone="muted" center>
+              Your {money(r.rental!.hold)} hold is released the moment {name} scans it back.
+            </Txt>
+          </>
+        ) : null}
+
+        {r.status === 'returning' ? <HandoffQR token={r.qrToken} title={`Hand it back to ${name}`} body={`${name} scans this to confirm the return. Then your hold is released.`} /> : null}
+
+        {r.status === 'delivered' ? <Done requestId={r.id} name={name} rated={r.rating} title="Delivered!" /> : null}
+        {r.status === 'returned' ? <Done requestId={r.id} name={name} rated={r.rating} title="Returned!" subtitle={`Your ${money(r.rental!.hold)} hold is released.`} /> : null}
 
         {r.status === 'cancelled' ? (
           <>
@@ -104,17 +142,14 @@ export default function RequestStatus() {
         <Button label="Cancel request" kind="danger" onPress={() => actions.cancelRequest(r.id)} style={{ marginTop: space.xxl }} />
       ) : null}
 
-      {__DEV__ && (r.status === 'accepted' || r.status === 'arriving') ? (
-        <DemoControls
-          label={r.status === 'accepted' ? `Simulate: ${r.deliverer!.name} arrives` : `Simulate: ${r.deliverer!.name} scans your QR`}
-          onPress={() => (r.status === 'accepted' ? actions.simulateArriving(r.id) : actions.simulateHandoffScanned(r.id))}
-        />
-      ) : null}
+      {__DEV__ && r.status === 'accepted' ? <DemoControls label={`Simulate: ${name} arrives`} onPress={() => actions.simulateArriving(r.id)} /> : null}
+      {__DEV__ && r.status === 'arriving' ? <DemoControls label={`Simulate: ${name} scans your QR`} onPress={() => actions.simulateHandoffScanned(r.id)} /> : null}
+      {__DEV__ && r.status === 'returning' ? <DemoControls label={`Simulate: ${name} scans the return`} onPress={() => actions.simulateReturnScanned(r.id)} /> : null}
     </Screen>
   );
 }
 
-function DelivererCard({ name, rating, floor }: { name: string; rating: number; floor: string }) {
+function DelivererCard({ name, rating, floor, rent }: { name: string; rating: number; floor: string; rent: boolean }) {
   const { colors } = useTheme();
   return (
     <Card style={{ alignSelf: 'stretch' }}>
@@ -127,7 +162,7 @@ function DelivererCard({ name, rating, floor }: { name: string; rating: number; 
         <View style={{ flex: 1 }}>
           <Txt variant="label">{name} accepted</Txt>
           <Txt variant="caption" tone="muted">
-            ★ {rating.toFixed(1)} · {floor} · checking the seal, then heading over
+            ★ {rating.toFixed(1)} · {floor} · {rent ? 'grabbing it now' : 'checking the seal, then heading over'}
           </Txt>
         </View>
       </Row>
@@ -135,24 +170,24 @@ function DelivererCard({ name, rating, floor }: { name: string; rating: number; 
   );
 }
 
-function HandoffQR({ token, name }: { token: string; name: string }) {
+function HandoffQR({ token, title, body }: { token: string; title: string; body: string }) {
   const { colors } = useTheme();
   return (
     <>
       <Txt variant="title" center>
-        {name} is at your door 🚪
+        {title}
       </Txt>
       <View style={{ padding: space.xl, backgroundColor: '#fff', borderRadius: radius.xl, shadowColor: colors.primary, shadowOpacity: 0.5, shadowRadius: 30 }}>
         <QRCode value={token} size={200} color="#0D0A14" backgroundColor="#fff" />
       </View>
       <Txt tone="muted" center>
-        Check the seal, then let {name} scan this. Payment is released on scan.
+        {body}
       </Txt>
     </>
   );
 }
 
-function Delivered({ requestId, name, rated }: { requestId: string; name: string; rated?: number }) {
+function Done({ requestId, name, rated, title, subtitle }: { requestId: string; name: string; rated?: number; title: string; subtitle?: string }) {
   const { colors } = useTheme();
   const { actions } = useStore();
   const [stars, setStars] = useState(rated ?? 0);
@@ -160,8 +195,13 @@ function Delivered({ requestId, name, rated }: { requestId: string; name: string
     <>
       <Txt style={{ fontSize: 72, lineHeight: 86 }}>🎉</Txt>
       <Txt variant="title" center>
-        Delivered!
+        {title}
       </Txt>
+      {subtitle ? (
+        <Txt tone="success" center>
+          {subtitle}
+        </Txt>
+      ) : null}
       <Txt tone="muted" center>
         How was {name}?
       </Txt>

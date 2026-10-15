@@ -50,7 +50,7 @@ export default function Profile() {
         <SettingRow label="Report a problem" value="→" />
       </Card>
       <Txt variant="caption" tone="muted" style={{ marginTop: space.md }}>
-        Knock only allows factory-sealed, shelf-stable items. No alcohol, tobacco, vapes, or medication.
+        Lobb only sells factory-sealed, shelf-stable items and rents non-food items. No alcohol, tobacco, vapes, or medication.
       </Txt>
 
       <Button label="Sign out" kind="ghost" onPress={actions.signOut} style={{ marginTop: space.xl }} />

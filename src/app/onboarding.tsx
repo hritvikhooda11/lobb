@@ -21,12 +21,12 @@ export default function Onboarding() {
       <LinearGradient colors={[colors.primarySoft, colors.bg]} style={{ position: 'absolute', inset: 0, height: 420 }} />
       <Screen>
         <View style={{ marginTop: space.xxxl, marginBottom: space.xxl }}>
-          <Txt style={{ fontSize: 64, lineHeight: 70 }}>🚪✊</Txt>
+          <Txt style={{ fontSize: 64, lineHeight: 70 }}>🙌📦</Txt>
           <Txt variant="hero" style={{ fontSize: 56, lineHeight: 58 }}>
-            knock<Txt variant="hero" tone="accent" style={{ fontSize: 56, lineHeight: 58 }}>.</Txt>
+            lobb<Txt variant="hero" tone="accent" style={{ fontSize: 56, lineHeight: 58 }}>.</Txt>
           </Txt>
           <Txt variant="body" tone="muted" style={{ marginTop: space.sm, fontSize: 18, lineHeight: 25 }}>
-            Snacks, drinks and chargers from the neighbor down the hall. At your door in under 10 minutes.
+            Snacks, drinks and chargers from the neighbor down the hall, plus stuff you can borrow. At your door in under 10 minutes.
           </Txt>
         </View>
 
@@ -71,7 +71,7 @@ export default function Onboarding() {
                     <View style={{ gap: 4 }}>
                       <Txt style={{ fontFamily: fonts.displayMedium, fontSize: 17 }}>{c.name}</Txt>
                       <Txt variant="caption" tone="muted">
-                        {c.members.toLocaleString()} neighbors on Knock
+                        {c.members.toLocaleString()} neighbors on Lobb
                       </Txt>
                     </View>
                     <Pill label={c.type} tone={selected ? 'primary' : 'default'} />
@@ -81,7 +81,7 @@ export default function Onboarding() {
             })}
             <Button
               label="Let's go"
-              icon="✊"
+              icon="🙌"
               disabled={!communityId}
               onPress={() => {
                 tap('success');

@@ -93,19 +93,20 @@ export function RadarPulse({ size = 220, emoji }: { size?: number; emoji: string
   );
 }
 
-const STEPS = ['Sent', 'Accepted', 'On the way', 'Delivered'];
+export const BUY_STEPS = ['Sent', 'Accepted', 'On the way', 'Delivered'];
+export const RENT_STEPS = ['Sent', 'Accepted', 'Borrowing', 'Returned'];
 
-export function StatusSteps({ step }: { step: number }) {
+export function StatusSteps({ step, steps = BUY_STEPS }: { step: number; steps?: string[] }) {
   const { colors } = useTheme();
   return (
     <View style={{ gap: space.sm }}>
       <Row gap={6}>
-        {STEPS.map((_, i) => (
+        {steps.map((_, i) => (
           <View key={i} style={{ flex: 1, height: 6, borderRadius: 3, backgroundColor: i <= step ? colors.primary : colors.surfaceHigh }} />
         ))}
       </Row>
       <Row style={{ justifyContent: 'space-between' }}>
-        {STEPS.map((s, i) => (
+        {steps.map((s, i) => (
           <Txt key={s} variant="caption" tone={i <= step ? 'default' : 'muted'} style={{ fontWeight: i === step ? '700' : '400' }}>
             {s}
           </Txt>

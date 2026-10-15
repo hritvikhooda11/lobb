@@ -53,7 +53,7 @@ export default function Wallet() {
         </Card>
         <Card style={{ flex: 1 }}>
           <Txt variant="caption" tone="muted">
-            Spent on Knock
+            Spent on Lobb
           </Txt>
           <Txt variant="heading">{money(spent)}</Txt>
         </Card>
