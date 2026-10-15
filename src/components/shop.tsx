@@ -10,7 +10,7 @@ import { Pressable, ScrollView, View } from 'react-native';
 import { categoryIcon, Icon, IconButton, Pill, SectionHeader, Txt, tap, useElevation } from '@/components/ui';
 import { bundledItem, type Category, type CategoryId, type Item, type ItemKind } from '@/data/catalog';
 import { money, priceFor, rentPerDay } from '@/data/pricing';
-import { categoryTint, fonts, radius, space, useTheme } from '@/theme';
+import { categoryTint, fonts, radius, space } from '@/theme';
 
 const openItem = (item: Item) => router.push({ pathname: '/item/[id]', params: { id: item.id } });
 
@@ -84,19 +84,12 @@ export function PromoCarousel({ kind, onPick }: { kind: ItemKind; onPick: (categ
 
 // ── Category circles ────────────────────────────────────────────────────────
 
-const CATEGORY_PHOTO: Record<ItemKind, Partial<Record<CategoryId, string>>> = {
-  buy: { snacks: 'hot-cheetos', drinks: 'coke-12', instant: 'cup-noodles', toiletries: 'toothpaste', electronics: 'lightning', household: 'tissues' },
-  rent: { electronics: 'ti84', household: 'umbrella' },
-};
-
-export function CategoryCircles({ kind, cats, active, onPick }: { kind: ItemKind; cats: Category[]; active: CategoryId | null; onPick: (id: CategoryId | null) => void }) {
-  const { colors } = useTheme();
+export function CategoryCircles({ cats, active, onPick }: { kind: ItemKind; cats: Category[]; active: CategoryId | null; onPick: (id: CategoryId | null) => void }) {
   return (
-    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginHorizontal: -space.lg, marginTop: space.xl }} contentContainerStyle={{ paddingHorizontal: space.lg, gap: space.lg }}>
+    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginHorizontal: -space.lg, marginTop: space.xl }} contentContainerStyle={{ paddingHorizontal: space.lg, gap: space.md }}>
       {cats.map((c) => {
         const selected = c.id === active;
-        const photoId = CATEGORY_PHOTO[kind][c.id];
-        const image = photoId ? bundledItem(photoId)?.image : undefined;
+        const tint = categoryTint[c.id];
         return (
           <Pressable
             key={c.id}
@@ -104,20 +97,9 @@ export function CategoryCircles({ kind, cats, active, onPick }: { kind: ItemKind
               tap();
               onPick(selected ? null : c.id);
             }}
-            style={{ alignItems: 'center', gap: 6, width: 68 }}>
-            <View
-              style={{
-                width: 64,
-                height: 64,
-                borderRadius: 32,
-                overflow: 'hidden',
-                backgroundColor: image ? '#fff' : categoryTint[c.id] + '2E',
-                alignItems: 'center',
-                justifyContent: 'center',
-                borderWidth: selected ? 3 : 0,
-                borderColor: colors.primary,
-              }}>
-              {image ? <Image source={image} style={{ width: '100%', height: '100%' }} contentFit="cover" /> : <Icon name={categoryIcon[c.id]} size={28} color={categoryTint[c.id]} />}
+            style={({ pressed }) => ({ alignItems: 'center', gap: 6, width: 70, transform: [{ scale: pressed ? 0.94 : 1 }] })}>
+            <View style={{ width: 60, height: 60, borderRadius: 30, backgroundColor: selected ? tint : tint + '26', alignItems: 'center', justifyContent: 'center' }}>
+              <Icon name={categoryIcon[c.id]} size={28} color={selected ? '#fff' : tint} />
             </View>
             <Txt variant="caption" tone={selected ? 'primary' : 'default'} style={{ fontWeight: selected ? '700' : '500' }} numberOfLines={1}>
               {c.label}

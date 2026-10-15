@@ -20,7 +20,7 @@ export type Category = { id: CategoryId; label: string; emoji: string; edible: b
 export const categories: Category[] = [
   { id: 'snacks', label: 'Snacks', emoji: '🍿', edible: true },
   { id: 'drinks', label: 'Drinks', emoji: '🥤', edible: true },
-  { id: 'instant', label: 'Instant food', emoji: '🍜', edible: true },
+  { id: 'instant', label: 'Instant', emoji: '🍜', edible: true },
   { id: 'toiletries', label: 'Toiletries', emoji: '🧴', edible: false },
   { id: 'electronics', label: 'Tech', emoji: '🔌', edible: false },
   { id: 'household', label: 'Household', emoji: '🧻', edible: false },

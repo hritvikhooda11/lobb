@@ -7,14 +7,14 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { BarcodeResponse } from '@/app/api/barcode+api';
 import type { PriceResponse } from '@/app/api/price+api';
 import { BarcodeScanner } from '@/components/barcode-scanner';
-import { Button, Card, Icon, ItemBadge, Pill, Row, Txt, tap } from '@/components/ui';
+import { Button, Card, categoryIcon, Icon, ItemBadge, Pill, Row, Txt, tap } from '@/components/ui';
 import { canRent, categories, findByBarcode, findDuplicate, getCategory, type CategoryId, type Item, type ItemKind } from '@/data/catalog';
 import { MAX_ADJUST_PCT, money, rentPerDay, sellerEarnings } from '@/data/pricing';
 import { attempt, showError } from '@/lib/alert';
 import { takePhoto, type Photo } from '@/lib/photo';
 import { supabase } from '@/lib/supabase';
 import { useStore } from '@/store/app-store';
-import { fonts, radius, space, useTheme } from '@/theme';
+import { categoryTint, fonts, radius, space, useTheme } from '@/theme';
 
 export default function ListItem() {
   const { colors } = useTheme();
@@ -116,7 +116,7 @@ export default function ListItem() {
   }
 
   return (
-    <ScrollView style={{ backgroundColor: colors.bg }} contentContainerStyle={{ padding: space.xl, paddingBottom: insets.bottom + space.xxl, gap: space.lg }} keyboardShouldPersistTaps="handled">
+    <ScrollView style={{ backgroundColor: colors.bg }} contentContainerStyle={{ padding: space.xl, paddingBottom: insets.bottom + space.xxl, gap: space.lg }} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">
       <Row style={{ justifyContent: 'space-between' }}>
         <Txt variant="title">List an item</Txt>
         <Pressable onPress={() => router.back()} hitSlop={12}>
@@ -248,9 +248,10 @@ export default function ListItem() {
                       setCategory(c.id);
                       resetQuote();
                     }}
-                    style={{ paddingHorizontal: 14, height: 38, borderRadius: radius.pill, justifyContent: 'center', backgroundColor: active ? colors.primarySoft : colors.surface, borderWidth: 1, borderColor: active ? colors.primary : colors.border }}>
+                    style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 14, height: 38, borderRadius: radius.pill, backgroundColor: active ? colors.primarySoft : colors.surface, borderWidth: 1, borderColor: active ? colors.primary : colors.border }}>
+                    <Icon name={categoryIcon[c.id]} size={16} color={active ? colors.primary : categoryTint[c.id]} />
                     <Txt variant="label" tone={active ? 'primary' : 'default'}>
-                      {c.emoji} {c.label}
+                      {c.label}
                     </Txt>
                   </Pressable>
                 );

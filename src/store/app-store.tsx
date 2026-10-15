@@ -347,6 +347,14 @@ function useAppState() {
         await refreshAll();
       },
       signOut: () => supabase.auth.signOut(),
+      /** Demo only: clears this account's requests, deliveries and listings (/api/dev-reset). */
+      resetDemo: async () => {
+        const { data } = await supabase.auth.getSession();
+        const res = await fetch('/api/dev-reset', { method: 'POST', headers: { Authorization: `Bearer ${data.session?.access_token ?? ''}` } });
+        const body = (await res.json().catch(() => ({}))) as { error?: string };
+        if (!res.ok) throw new Error(res.status === 404 ? 'Demo reset is off. Set LOBB_DEV_LOGIN=1 in .env and restart.' : (body.error ?? 'Reset failed'));
+        await refreshAll();
+      },
       setMode: (mode: State['mode']) => setState((s) => ({ ...s, mode })),
       refresh: refreshAll,
 

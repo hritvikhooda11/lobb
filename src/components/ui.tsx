@@ -46,7 +46,7 @@ export function Screen({ children, scroll = true, padded = true }: { children: R
   const content = { paddingTop: insets.top + space.md, paddingBottom: insets.bottom + space.xxxl, paddingHorizontal: padded ? space.lg : 0 };
   if (!scroll) return <View style={[{ flex: 1, backgroundColor: colors.bg }, content]}>{children}</View>;
   return (
-    <ScrollView style={{ flex: 1, backgroundColor: colors.bg }} contentContainerStyle={content} keyboardShouldPersistTaps="handled">
+    <ScrollView style={{ flex: 1, backgroundColor: colors.bg }} contentContainerStyle={content} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">
       {children}
     </ScrollView>
   );

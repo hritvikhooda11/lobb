@@ -1,6 +1,6 @@
 import { LinearGradient } from 'expo-linear-gradient';
 import { useState } from 'react';
-import { KeyboardAvoidingView, Platform, Pressable, TextInput, View } from 'react-native';
+import { Keyboard, KeyboardAvoidingView, Platform, Pressable, TextInput, View } from 'react-native';
 
 import { Button, Card, Icon, Pill, Row, Screen, Txt, tap } from '@/components/ui';
 import { communities } from '@/data/catalog';
@@ -80,6 +80,12 @@ export default function Onboarding() {
               autoCapitalize="none"
               autoComplete="email"
               keyboardType="email-address"
+              returnKeyType="go"
+              onSubmitEditing={() => {
+                if (!isUwEmail(email) || busy) return;
+                if (DEMO_LOGIN) run(() => devSignIn(email, actions.verifyCode));
+                else run(() => actions.sendCode(email)).then((ok) => ok && setCodeSent(true));
+              }}
               style={inputStyle(isUwEmail(email))}
             />
             <Txt variant="caption" tone="muted">
@@ -112,7 +118,11 @@ export default function Onboarding() {
             <Txt variant="label">Enter the code we sent to {email.trim().toLowerCase()}</Txt>
             <TextInput
               value={code}
-              onChangeText={(t) => setCode(t.replace(/\D/g, '').slice(0, 6))}
+              onChangeText={(t) => {
+                const next = t.replace(/\D/g, '').slice(0, 6);
+                setCode(next);
+                if (next.length === 6) Keyboard.dismiss();
+              }}
               placeholder="123456"
               placeholderTextColor={colors.textMuted}
               keyboardType="number-pad"
