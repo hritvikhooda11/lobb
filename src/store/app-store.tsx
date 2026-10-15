@@ -66,7 +66,7 @@ export type Listing = { itemId: string; quantity: number; active: boolean; adjus
 
 export type WalletEntry = { id: string; label: string; amount: number; at: number };
 
-export type NewItem = Pick<Item, 'name' | 'size' | 'category' | 'kind' | 'marketPrice'> & { photoUri: string };
+export type NewItem = Pick<Item, 'name' | 'size' | 'category' | 'kind' | 'marketPrice' | 'barcode'> & { photoUri: string };
 
 type State = {
   user: User | null;
@@ -208,6 +208,7 @@ function useAppState() {
         const item: Item = {
           id,
           kind: input.kind,
+          barcode: input.barcode,
           name: input.name,
           size: input.size,
           category: input.category,
