@@ -1,5 +1,5 @@
 // Runs every migration in PGlite (real Postgres in WASM) with stand-ins for Supabase's auth/storage/cron,
-// then plays three students through every flow, including the attacks RLS must stop. Run: npm run test:db
+// then plays four students through every flow, including the attacks RLS must stop. Run: npm run test:db
 import { PGlite } from '@electric-sql/pglite';
 import { pgcrypto } from '@electric-sql/pglite/contrib/pgcrypto';
 import { readdirSync, readFileSync } from 'node:fs';
@@ -82,25 +82,37 @@ try {
   ok(`gmail rejected (${e.message})`);
 }
 const ids = {};
-for (const [k, email] of [['alex', 'alex@uw.edu'], ['bri', 'bri@uw.edu'], ['cam', 'cam@uw.edu']]) {
+for (const [k, email] of [['alex', 'alex@uw.edu'], ['bri', 'bri@uw.edu'], ['cam', 'cam@uw.edu'], ['dan', 'dan@uw.edu'], ['eve', 'eve@uw.edu']]) {
   ids[k] = one(await db.query(`insert into auth.users (email) values ($1) returning id`, [email])).id;
 }
 const prof = one(await db.query(`select name from public.profiles where id = $1`, [ids.alex]));
 prof?.name === 'Alex' ? ok('profile auto-created as "Alex"') : bad(`profile name: ${prof?.name}`);
 
-console.log('\nProfiles');
-await expectOk('alex sets community', ids.alex, `update public.profiles set community_id = 'standard' where id = auth.uid()`);
-await expectOk('bri sets community', ids.bri, `update public.profiles set community_id = 'standard' where id = auth.uid()`);
-await expectOk('cam sets other community', ids.cam, `update public.profiles set community_id = 'west-campus' where id = auth.uid()`);
+console.log('\nProfiles and rooms');
+await expectOk('alex sets building + room', ids.alex, `select public.set_home('standard', '912')`);
+await expectOk('bri sets building + room', ids.bri, `select public.set_home('standard', '407')`);
+await expectOk('dan sets building + room', ids.dan, `select public.set_home('standard', '204')`);
+await expectOk('cam sets other building', ids.cam, `select public.set_home('west-campus', '15b')`);
+await expectFail('room number is required', ids.alex, `select public.set_home('standard', '  ')`, [], /room number/);
+await expectFail('unknown building rejected', ids.alex, `select public.set_home('nowhere', '1')`, [], /building/);
+const myRoom = one(await as(ids.alex, `select room from public.home_details`))?.room;
+myRoom === '912' ? ok('alex can read her own room') : bad(`room ${myRoom}`);
+(await as(ids.alex, `select * from public.home_details`)).rows.length === 1 ? ok('alex sees only her own room row') : bad('rooms leaked to a neighbor');
+one(await as(ids.cam, `select room from public.home_details`))?.room === '15B' ? ok('rooms are stored upper-case (15B)') : bad('room case');
 await expectFail('cannot edit own rating', ids.alex, `update public.profiles set rating_avg = 1 where id = auth.uid()`, [], /permission denied/);
 await expectFail('cannot read price quotes', ids.alex, `select * from public.price_quotes`, [], /permission denied/);
 await expectFail('cannot read the email allowlist', ids.alex, `select * from public.allowed_email_domains`, [], /permission denied/);
 await expectFail('cannot delete requests', ids.alex, `delete from public.requests`, [], /permission denied/);
 
 console.log('\nBuy flow');
+await expectFail('cannot request an item nobody lists', ids.alex, `select public.create_request('coke-12', '')`, [], /Nobody nearby/);
+await expectOk('dan lists Coke (5)', ids.dan, `insert into public.listings (item_id, quantity) values ('coke-12', 5)`);
+await expectOk('dan lists water (3)', ids.dan, `insert into public.listings (item_id, quantity) values ('water-16', 3)`);
+await expectFail('cam (other building) still can’t request Coke', ids.cam, `select public.create_request('coke-12', '')`, [], /Nobody nearby/);
 await expectFail('cannot insert a request directly', ids.alex, `insert into public.requests (kind, buyer_id, item_id, community_id, item_price, deliverer_fee, platform_fee, total) values ('buy', auth.uid(), 'coke-12', 'standard', 1, 1, 1, 3)`);
-const req = one(await expectOk('alex requests a Coke', ids.alex, `select * from public.create_request('coke-12', 'Unit 912')`));
-req?.total === 225 ? ok('server price total = $2.25 (matches app)') : bad(`total ${req?.total}`);
+const req = one(await expectOk('alex requests a Coke (lobby meetup)', ids.alex, `select * from public.create_request('coke-12', '', null, 'lobby')`));
+req?.total === 225 && req?.fulfillment === 'lobby' && req?.fulfillment_adjust === 0 ? ok('lobby = base price $2.25 (matches app)') : bad(`total ${req?.total} ${req?.fulfillment}`);
+(await as(ids.alex, `select * from public.request_private where request_id = $1`, [req.id])).rows.length === 0 ? ok('lobby meetup stores no room') : bad('room stored for lobby');
 await expectFail('second live request blocked', ids.alex, `select public.create_request('water-16', 'x')`, [], /Finish your current/);
 
 const seenBefore = (await as(ids.bri, `select id from public.requests where status = 'open'`)).rows.length;
@@ -143,12 +155,54 @@ await expectOk('bri accepts rental', ids.bri, `select public.accept_request($1)`
 await expectOk('bri condition photo', ids.bri, `select public.verify_seal($1, 'bri/cond.jpg')`, [rent.id]);
 const rcode = one(await as(ids.alex, `select code from public.handoff_codes where request_id = $1 and purpose = 'handoff'`, [rent.id]))?.code;
 await expectOk('handoff starts rental', ids.bri, `select public.confirm_handoff($1, $2, 'p')`, [rent.id, rcode]);
+(await as(ids.dan, `select * from public.item_counts()`)).rows.some((c) => c.item_id === 'ti84') ? bad('TI-84 still offered while it is on loan') : ok('TI-84 disappears for neighbors while on loan');
 const renting = one(await as(ids.alex, `select status, return_by from public.requests where id = $1`, [rent.id]));
 renting?.status === 'renting' && renting?.return_by ? ok('status renting with return_by set') : bad(`rental ${renting?.status}`);
 await expectOk('alex starts return', ids.alex, `select public.start_return($1)`, [rent.id]);
 const retCode = one(await as(ids.alex, `select code from public.handoff_codes where request_id = $1 and purpose = 'return'`, [rent.id]))?.code;
 const returned = one(await expectOk('bri scans return code', ids.bri, `select public.confirm_return($1, $2) as r`, [rent.id, retCode]))?.r;
 returned?.status === 'returned' ? ok('status returned') : bad(`status ${JSON.stringify(returned)}`);
+(await as(ids.dan, `select * from public.item_counts()`)).rows.some((c) => c.item_id === 'ti84' && c.sellers === 1) ? ok('TI-84 is available again after it’s returned') : bad('TI-84 not restored');
+
+console.log('\nDelivery options and price differences');
+const door = one(await expectOk('alex requests Coke for door drop-off', ids.alex, `select * from public.create_request('coke-12', 'knock twice', null, 'dropoff')`));
+door?.total === 260 && door?.fulfillment_adjust === 35 ? ok('door drop-off +15% = $2.60 (+$0.35)') : bad(`door total ${door?.total} adjust ${door?.fulfillment_adjust}`);
+one(await as(ids.alex, `select buyer_room from public.request_private where request_id = $1`, [door.id]))?.buyer_room === '912' ? ok('buyer’s room is saved for the drop-off') : bad('buyer room missing');
+(await as(ids.bri, `select * from public.request_private where request_id = $1`, [door.id])).rows.length === 0 ? ok('neighbors can’t see the room before accepting') : bad('room leaked before accept');
+await expectOk('bri accepts the drop-off', ids.bri, `select public.accept_request($1)`, [door.id]);
+one(await as(ids.bri, `select buyer_room from public.request_private where request_id = $1`, [door.id]))?.buyer_room === '912' ? ok('deliverer sees the room after accepting') : bad('deliverer cannot see room');
+(await as(ids.dan, `select * from public.request_private where request_id = $1`, [door.id])).rows.length === 0 ? ok('other neighbors still can’t see it') : bad('room leaked to a bystander');
+one(await db.query(`select seller_payout from public.requests where id = $1`, [door.id]))?.seller_payout === 240 ? ok('drop-off pays the seller more ($2.40)') : bad('drop-off payout');
+await db.exec(`update public.requests set status = 'cancelled' where id = '${door.id}'`);
+
+const pick = one(await expectOk('alex requests Coke for pickup', ids.alex, `select * from public.create_request('coke-12', '', null, 'pickup')`));
+pick?.total === 200 && pick?.fulfillment_adjust === -25 ? ok('pickup −10% = $2.00 (−$0.25)') : bad(`pickup total ${pick?.total} adjust ${pick?.fulfillment_adjust}`);
+await expectOk('bri accepts the pickup', ids.bri, `select public.accept_request($1)`, [pick.id]);
+one(await as(ids.alex, `select seller_room from public.request_private where request_id = $1`, [pick.id]))?.seller_room === '407' ? ok('buyer is told which room to go to (407)') : bad('seller room missing');
+one(await db.query(`select seller_payout from public.requests where id = $1`, [pick.id]))?.seller_payout === 180 ? ok('pickup pays the seller less ($1.80)') : bad('pickup payout');
+await db.exec(`update public.requests set status = 'cancelled' where id = '${pick.id}'`);
+
+const rentDoor = one(await expectOk('alex rents TI-84 with door drop-off', ids.alex, `select * from public.create_request('ti84', '', '3h', 'dropoff')`));
+rentDoor?.total === 445 ? ok('rental door drop-off: ($3.60 + $0.25) +15% = $4.45') : bad(`rental door total ${rentDoor?.total}`);
+await db.exec(`update public.requests set status = 'cancelled' where id = '${rentDoor.id}'`);
+await expectOk('eve joins The Standard but skips the room (old account)', ids.eve, `update public.profiles set community_id = 'standard' where id = auth.uid()`);
+await expectFail('door drop-off needs a room number', ids.eve, `select public.create_request('coke-12', '', null, 'dropoff')`, [], /room number/);
+await expectOk('lobby meetup works without a room', ids.eve, `select public.create_request('coke-12', '', null, 'lobby')`);
+await db.exec(`update public.requests set status = 'cancelled' where buyer_id = '${ids.eve}'`);
+await expectFail('unknown option rejected', ids.alex, `select public.create_request('coke-12', '', null, 'teleport')`, [], /how you want/);
+
+console.log('\nSold-out items disappear');
+await expectOk('dan lists Celsius (just 1)', ids.dan, `insert into public.listings (item_id, quantity) values ('celsius', 1)`);
+(await as(ids.alex, `select * from public.item_counts()`)).rows.some((c) => c.item_id === 'celsius' && c.sellers === 1) ? ok('Celsius shows 1 nearby') : bad('celsius not counted');
+const cel = one(await as(ids.alex, `select * from public.create_request('celsius', '', null, 'lobby')`));
+await as(ids.dan, `select public.accept_request($1)`, [cel.id]);
+await as(ids.dan, `select public.verify_seal($1, 'dan/s.jpg')`, [cel.id]);
+const celCode = one(await as(ids.alex, `select code from public.handoff_codes where request_id = $1`, [cel.id]))?.code;
+await as(ids.dan, `select public.confirm_handoff($1, $2, 'dan/h.jpg')`, [cel.id, celCode]);
+(await as(ids.alex, `select * from public.item_counts()`)).rows.some((c) => c.item_id === 'celsius') ? bad('sold-out Celsius still listed') : ok('Celsius is gone from the store after the sale');
+await expectFail('can’t request a sold-out item', ids.alex, `select public.create_request('celsius', '', null, 'lobby')`, [], /Nobody nearby/);
+await expectOk('dan can restock', ids.dan, `update public.listings set quantity = 2 where item_id = 'celsius'`);
+(await as(ids.alex, `select * from public.item_counts()`)).rows.some((c) => c.item_id === 'celsius') ? ok('restocked Celsius is back') : bad('restock not reflected');
 
 console.log('\nCode brute force');
 const r3 = one(await as(ids.alex, `select * from public.create_request('water-16', 'x')`));
@@ -170,7 +224,7 @@ item?.market_price === 249 ? ok('item price comes from the quote') : bad(`price 
 await expectFail('quote is single-use', ids.bri, `select public.create_item($1, '', null, null, 0)`, [quote.id], /quote/);
 await expectFail('price_quotes not writable by users', ids.bri, `insert into public.price_quotes (user_id, kind, name, category, market_price, eligible) values (auth.uid(), 'buy', 'x', 'snacks', 99999, true)`);
 const counts = (await as(ids.alex, `select * from public.item_counts()`)).rows;
-counts.some((c) => c.item_id === 'coke-12' && c.sellers === 1) ? ok('alex sees 1 neighbor selling Coke') : bad(`counts ${JSON.stringify(counts)}`);
+counts.some((c) => c.item_id === 'coke-12' && c.sellers === 2) ? ok('alex sees 2 neighbors selling Coke') : bad(`counts ${JSON.stringify(counts)}`);
 
 console.log('\nRows to check');
 const hasPriceFns = one(await db.query(`select (select total from public.buy_price(11999)) as a, public.rent_per_day(1500) as b`));

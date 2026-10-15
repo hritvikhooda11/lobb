@@ -14,7 +14,7 @@ export default function Profile() {
   const { state, actions } = useStore();
   const user = state.profile!;
   const community = communities.find((c) => c.id === user.communityId);
-  const delivered = state.wallet.length;
+  const delivered = state.wallet.filter((w) => w.kind === 'earn').length;
 
   return (
     <Screen>
@@ -40,6 +40,8 @@ export default function Profile() {
       <SectionHeader title="Settings" />
       <Card>
         <SettingRow label="Email" value={state.email ?? ''} />
+        <Divider />
+        <SettingRow label="Room" value={user.room ?? ''} />
         <Divider />
         <SettingRow label="Payment method" value="Add card" />
         <Divider />

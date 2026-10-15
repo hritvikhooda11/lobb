@@ -3,6 +3,7 @@ import { Tabs } from 'expo-router/js-tabs';
 import type { ColorValue } from 'react-native';
 
 import type { IconName } from '@/components/ui';
+import { useIncomingCount } from '@/components/seller-alerts';
 import { LIVE_STATUSES, useStore } from '@/store/app-store';
 import { useTheme } from '@/theme';
 
@@ -15,6 +16,7 @@ export default function TabsLayout() {
   const { colors } = useTheme();
   const { state } = useStore();
   const live = state.requests.filter((r) => LIVE_STATUSES.includes(r.status)).length;
+  const waiting = useIncomingCount();
   return (
     <Tabs
       screenOptions={{
@@ -24,7 +26,10 @@ export default function TabsLayout() {
         tabBarStyle: { backgroundColor: colors.surface, borderTopColor: colors.border },
         tabBarLabelStyle: { fontWeight: '600', fontSize: 11 },
       }}>
-      <Tabs.Screen name="index" options={{ title: 'Home', tabBarIcon: icon('home', 'home-outline') }} />
+      <Tabs.Screen
+        name="index"
+        options={{ title: 'Home', tabBarIcon: icon('home', 'home-outline'), tabBarBadge: waiting > 0 ? '!' : undefined, tabBarBadgeStyle: { backgroundColor: colors.danger } }}
+      />
       <Tabs.Screen
         name="activity"
         options={{ title: 'Activity', tabBarIcon: icon('receipt', 'receipt-outline'), tabBarBadge: live || undefined, tabBarBadgeStyle: { backgroundColor: colors.danger } }}
