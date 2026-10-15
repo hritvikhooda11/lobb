@@ -10,7 +10,7 @@ import type { RealtimeChannel } from '@supabase/supabase-js';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
 import { bundledItem, type CategoryId, type Item, type ItemKind } from '@/data/catalog';
-import { sellerEarnings, type PriceBreakdown } from '@/data/pricing';
+import { sellerEarnings, type Fulfillment, type PriceBreakdown } from '@/data/pricing';
 import { friendlyError, publicPhotoUrl, supabase, uploadPhoto } from '@/lib/supabase';
 
 export const DELIVERY_WINDOW_MS = 10 * 60 * 1000;
@@ -27,9 +27,15 @@ export type Request = {
   kind: ItemKind;
   itemId: string;
   price: PriceBreakdown;
-  rental?: { rent: number; platform: number; total: number; hold: number; hours: number };
+  rental?: { rent: number; platform: number; fulfillment: number; total: number; hold: number; hours: number };
   status: RequestStatus;
+  fulfillment: Fulfillment;
+  /** Optional note from the buyer ("knock twice"). */
   locationNote: string;
+  /** The deliverer's room, shown to the buyer for a pickup once someone accepts. */
+  sellerRoom?: string;
+  /** The buyer's own room, kept for a door drop-off. */
+  buyerRoom?: string;
   createdAt: number;
   acceptedAt?: number;
   deadlineAt?: number;
@@ -49,7 +55,13 @@ export type Job = {
   kind: ItemKind;
   itemId: string;
   buyerName: string;
+  fulfillment: Fulfillment;
+  /** The buyer's optional note. */
   location: string;
+  /** The buyer's room, only visible to the deliverer after accepting a door drop-off. */
+  buyerRoom?: string;
+  /** Your own room, shown on a pickup. */
+  myRoom?: string;
   earnings: number;
   status: JobStatus;
   priority: boolean;
@@ -62,8 +74,9 @@ export type Job = {
 };
 
 export type Listing = { itemId: string; quantity: number; active: boolean; adjustPct: number };
-export type WalletEntry = { id: string; label: string; amount: number; at: number };
-export type Profile = { id: string; name: string; communityId: string | null; rating: number; reliability: number };
+/** One line of money history: positive = earned as a seller, negative = spent as a buyer. */
+export type WalletEntry = { id: string; kind: 'earn' | 'spend'; label: string; amount: number; at: number };
+export type Profile = { id: string; name: string; communityId: string | null; room: string | null; rating: number; reliability: number };
 
 type DbRequest = {
   id: string;
@@ -76,6 +89,8 @@ type DbRequest = {
   deliverer_fee: number;
   platform_fee: number;
   total: number;
+  fulfillment: Fulfillment;
+  fulfillment_adjust: number;
   rental_hours: number | null;
   hold_amount: number | null;
   seller_payout: number | null;
@@ -93,6 +108,8 @@ type DbItem = { id: string; kind: ItemKind; barcode: string | null; name: string
 
 type State = {
   ready: boolean;
+  /** True once the first requests/jobs load has finished (so old requests don't trigger alerts). */
+  activityLoaded: boolean;
   userId: string | null;
   email: string | null;
   profile: Profile | null;
@@ -104,7 +121,7 @@ type State = {
   wallet: WalletEntry[];
 };
 
-const initialState: State = { ready: false, userId: null, email: null, profile: null, mode: 'buy', items: [], requests: [], jobs: [], listings: [], wallet: [] };
+const initialState: State = { ready: false, activityLoaded: false, userId: null, email: null, profile: null, mode: 'buy', items: [], requests: [], jobs: [], listings: [], wallet: [] };
 
 const ms = (iso: string | null) => (iso ? new Date(iso).getTime() : undefined);
 const rentalLabel = (hours: number | null) => (!hours ? undefined : hours >= 24 ? `${hours / 24} day${hours > 24 ? 's' : ''}` : `${hours} hours`);
@@ -140,8 +157,13 @@ function useAppState() {
   // ── Loading ──────────────────────────────────────────────────────────────
 
   const loadProfile = useCallback(async (userId: string) => {
-    const row = await must(supabase.from('profiles').select('id, name, community_id, rating_avg, reliability_score').eq('id', userId).maybeSingle());
-    const profile: Profile | null = row ? { id: row.id, name: row.name, communityId: row.community_id, rating: Number(row.rating_avg), reliability: row.reliability_score } : null;
+    const [row, home] = await Promise.all([
+      must(supabase.from('profiles').select('id, name, community_id, rating_avg, reliability_score').eq('id', userId).maybeSingle()),
+      must(supabase.from('home_details').select('room').eq('user_id', userId).maybeSingle()),
+    ]);
+    const profile: Profile | null = row
+      ? { id: row.id, name: row.name, communityId: row.community_id, room: home?.room ?? null, rating: Number(row.rating_avg), reliability: row.reliability_score }
+      : null;
     setState((s) => ({ ...s, profile }));
     return profile;
   }, []);
@@ -179,10 +201,15 @@ function useAppState() {
 
     const peopleIds = [...new Set([...myRequests.map((r) => r.accepted_by), ...jobRows.map((r) => r.buyer_id)].filter((x): x is string => !!x))];
     const liveIds = myRequests.filter((r) => LIVE_STATUSES.includes(r.status)).map((r) => r.id);
-    const [people, codes] = await Promise.all([
+    // Rooms are private to the two people in a request, so this only returns rows we're a party to.
+    const roomIds = [...myRequests.map((r) => r.id), ...jobRows.filter((r) => r.accepted_by === userId).map((r) => r.id)];
+    const [people, codes, rooms] = await Promise.all([
       peopleIds.length ? must(supabase.from('profiles').select('id, name, rating_avg').in('id', peopleIds)) : Promise.resolve([]),
       liveIds.length ? must(supabase.from('handoff_codes').select('request_id, purpose, code').in('request_id', liveIds)) : Promise.resolve([]),
+      roomIds.length ? must(supabase.from('request_private').select('request_id, buyer_room, seller_room').in('request_id', roomIds)) : Promise.resolve([]),
     ]);
+    const roomsFor = (id: string) => (rooms ?? []).find((x) => x.request_id === id);
+    const myRoom = stateRef.current.profile?.room ?? undefined;
     const personById = new Map((people ?? []).map((p) => [p.id, { name: p.name as string, rating: Number(p.rating_avg) }]));
     const codeFor = (id: string, purpose: string) => (codes ?? []).find((c) => c.request_id === id && c.purpose === purpose)?.code as string | undefined;
 
@@ -190,10 +217,13 @@ function useAppState() {
       id: r.id,
       kind: r.kind,
       itemId: r.item_id,
-      price: { item: r.item_price, deliverer: r.deliverer_fee, platform: r.platform_fee, total: r.total },
-      rental: r.kind === 'rent' ? { rent: r.deliverer_fee, platform: r.platform_fee, total: r.total, hold: r.hold_amount ?? 0, hours: r.rental_hours ?? 0 } : undefined,
+      price: { item: r.item_price, deliverer: r.deliverer_fee, platform: r.platform_fee, fulfillment: r.fulfillment_adjust, total: r.total },
+      rental: r.kind === 'rent' ? { rent: r.deliverer_fee, platform: r.platform_fee, fulfillment: r.fulfillment_adjust, total: r.total, hold: r.hold_amount ?? 0, hours: r.rental_hours ?? 0 } : undefined,
       status: r.status,
+      fulfillment: r.fulfillment,
       locationNote: r.location_note,
+      sellerRoom: roomsFor(r.id)?.seller_room ?? undefined,
+      buyerRoom: roomsFor(r.id)?.buyer_room ?? undefined,
       createdAt: ms(r.created_at)!,
       acceptedAt: ms(r.accepted_at),
       deadlineAt: ms(r.deadline_at),
@@ -226,13 +256,16 @@ function useAppState() {
                     : r.status === 'returned'
                       ? 'returned'
                       : 'closed';
-        const estimate = r.kind === 'buy' && item ? sellerEarnings(item, listing?.adjustPct ?? 0) : r.deliverer_fee;
+        const estimate = (r.kind === 'buy' && item ? sellerEarnings(item, listing?.adjustPct ?? 0) : r.deliverer_fee) + r.fulfillment_adjust;
         return {
           id: r.id,
           kind: r.kind,
           itemId: r.item_id,
           buyerName: personById.get(r.buyer_id)?.name ?? 'A neighbor',
+          fulfillment: r.fulfillment,
           location: r.location_note,
+          buyerRoom: roomsFor(r.id)?.buyer_room ?? undefined,
+          myRoom: r.fulfillment === 'pickup' ? myRoom : undefined,
           earnings: r.seller_payout ?? estimate,
           status,
           priority: !!listing?.active,
@@ -245,11 +278,17 @@ function useAppState() {
         };
       });
 
-    const wallet: WalletEntry[] = jobs
+    const nameOf = (id: string) => items.find((i) => i.id === id)?.name ?? 'item';
+    const earned: WalletEntry[] = jobs
       .filter((j) => j.deliveredAt && ['delivered', 'returning', 'returned'].includes(j.status))
-      .map((j) => ({ id: j.id, label: `${j.kind === 'rent' ? 'Rented out' : 'Sold'} ${items.find((i) => i.id === j.itemId)?.name ?? 'item'}`, amount: j.earnings, at: j.deliveredAt! }));
+      .map((j) => ({ id: `earn-${j.id}`, kind: 'earn', label: `${j.kind === 'rent' ? 'Rented out' : 'Sold'} ${nameOf(j.itemId)}`, amount: j.earnings, at: j.deliveredAt! }));
+    // What you paid as a buyer counts once the item has actually changed hands.
+    const spent: WalletEntry[] = myRequests
+      .filter((r) => ['delivered', 'renting', 'returning', 'returned'].includes(r.status))
+      .map((r) => ({ id: `spend-${r.id}`, kind: 'spend', label: `${r.kind === 'rent' ? 'Rented' : 'Bought'} ${nameOf(r.item_id)}`, amount: -r.total, at: ms(r.delivered_at) ?? ms(r.created_at)! }));
+    const wallet = [...earned, ...spent].sort((a, b) => b.at - a.at);
 
-    setState((s) => ({ ...s, requests, jobs, wallet }));
+    setState((s) => ({ ...s, requests, jobs, wallet, activityLoaded: true }));
   }, []);
 
   const refreshAll = useCallback(async () => {
@@ -292,13 +331,14 @@ function useAppState() {
 
   // ── Live updates ─────────────────────────────────────────────────────────
 
-  const signedIn = !!state.userId && !!state.profile?.communityId;
+  const signedIn = !!state.userId && !!state.profile?.communityId && !!state.profile?.room;
   useEffect(() => {
     if (!signedIn) return;
     let timer: ReturnType<typeof setTimeout> | null = null;
     const soon = () => {
       if (timer) clearTimeout(timer);
-      timer = setTimeout(() => loadActivity().catch(() => {}), 250);
+      // Catalog first: a sale or loan changes who has what, so "nearby" counts must refresh too.
+      timer = setTimeout(() => refreshAll().catch(() => {}), 250);
     };
     const channel: RealtimeChannel = supabase
       .channel('lobb-requests')
@@ -310,7 +350,7 @@ function useAppState() {
       clearInterval(poll);
       supabase.removeChannel(channel);
     };
-  }, [signedIn, loadActivity]);
+  }, [signedIn, refreshAll]);
 
   // ── Actions ──────────────────────────────────────────────────────────────
 
@@ -341,8 +381,9 @@ function useAppState() {
         const { error } = await supabase.auth.verifyOtp({ email: email.trim().toLowerCase(), token: token.trim(), type: 'email' });
         if (error) throw new Error(error.message.includes('expired') || error.message.includes('invalid') ? 'That code is wrong or expired.' : friendlyError(error));
       },
-      setCommunity: async (communityId: string) => {
-        await must(supabase.from('profiles').update({ community_id: communityId }).eq('id', uid()));
+      /** Onboarding: pick your building and enter your room number (kept private; shared only with the other person in a request). */
+      setHome: async (communityId: string, room: string) => {
+        await must(supabase.rpc('set_home', { p_community: communityId, p_room: room }));
         await loadProfile(uid());
         await refreshAll();
       },
@@ -358,8 +399,11 @@ function useAppState() {
       setMode: (mode: State['mode']) => setState((s) => ({ ...s, mode })),
       refresh: refreshAll,
 
-      createRequest: async (item: Item, locationNote: string, durationId?: string) =>
-        (await rpc('create_request', { p_item_id: item.id, p_location_note: locationNote, p_duration_id: durationId ?? null })).id,
+      createRequest: async (item: Item, locationNote: string, fulfillment: Fulfillment, durationId?: string) => {
+        const request = await rpc('create_request', { p_item_id: item.id, p_location_note: locationNote, p_duration_id: durationId ?? null, p_fulfillment: fulfillment });
+        await loadCatalog();
+        return request.id;
+      },
       cancelRequest: (id: string) => rpc('cancel_request', { p_id: id }),
       startReturn: (id: string) => rpc('start_return', { p_id: id }),
       rateRequest: async (id: string, stars: number) => {

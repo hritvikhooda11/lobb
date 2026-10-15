@@ -6,7 +6,7 @@ import QRCode from 'react-native-qrcode-svg';
 import { BUY_STEPS, CountdownRing, RadarPulse, RENT_STEPS, StatusSteps } from '@/components/live';
 import { Button, Card, Icon, ItemBadge, ItemPhoto, Pill, Row, Screen, StateBadge, Txt, tap } from '@/components/ui';
 import { communities } from '@/data/catalog';
-import { money } from '@/data/pricing';
+import { FULFILLMENT, money, type Fulfillment } from '@/data/pricing';
 import { attempt } from '@/lib/alert';
 import { DELIVERY_WINDOW_MS, LIVE_STATUSES, useItem, useNow, useStore, type RequestStatus } from '@/store/app-store';
 import { fonts, radius, space, useTheme } from '@/theme';
@@ -40,6 +40,9 @@ export default function RequestStatusScreen() {
   const remaining = r.deadlineAt ? r.deadlineAt - now : DELIVERY_WINDOW_MS;
   const total = r.rental ? r.rental.total : r.price.total;
   const name = r.deliverer?.name ?? 'Your neighbor';
+  const f = r.fulfillment;
+  const whereShort = { dropoff: r.buyerRoom ? `Door drop-off · Room ${r.buyerRoom}` : 'Door drop-off', lobby: 'Lobby meetup', pickup: 'Pickup' }[f];
+  const countdownCaption = remaining <= 0 ? 'running late' : { dropoff: 'until it’s at your door', lobby: 'until you meet in the lobby', pickup: 'to pick it up' }[f];
 
   return (
     <Screen>
@@ -57,7 +60,7 @@ export default function RequestStatusScreen() {
         <View style={{ flex: 1 }}>
           <Txt variant="heading">{item.name}</Txt>
           <Txt variant="caption" tone="muted">
-            {rent && r.rental ? `${r.rental.hours >= 24 ? `${r.rental.hours / 24} day` : `${r.rental.hours} hours`} rental` : item.size} · meet at {r.locationNote}
+            {rent && r.rental ? `${r.rental.hours >= 24 ? `${r.rental.hours / 24} day` : `${r.rental.hours} hours`} rental` : item.size} · {whereShort}
           </Txt>
         </View>
       </Row>
@@ -83,11 +86,17 @@ export default function RequestStatusScreen() {
 
         {r.status === 'accepted' ? (
           <>
-            <CountdownRing remainingMs={remaining} totalMs={DELIVERY_WINDOW_MS} caption={remaining > 0 ? 'until it’s at your door' : 'running late'} />
-            <DelivererCard name={name} rating={r.deliverer?.rating ?? 5} rent={rent} />
+            <CountdownRing remainingMs={remaining} totalMs={DELIVERY_WINDOW_MS} caption={countdownCaption} />
+            <DelivererCard name={name} rating={r.deliverer?.rating ?? 5} rent={rent} fulfillment={f} />
+            <WherePanel fulfillment={f} name={name} buyerRoom={r.buyerRoom} sellerRoom={r.sellerRoom} />
+            {r.locationNote ? (
+              <Txt variant="caption" tone="muted" center>
+                Your note: “{r.locationNote}”
+              </Txt>
+            ) : null}
             {r.code ? (
               <Txt variant="caption" tone="muted" center>
-                Your handoff code is <Txt variant="caption" style={{ fontFamily: fonts.display, letterSpacing: 2 }}>{r.code}</Txt>. We’ll show the QR when {name} is at your door.
+                Your handoff code is <Txt variant="caption" style={{ fontFamily: fonts.display, letterSpacing: 2 }}>{r.code}</Txt>. We’ll show the QR when {f === 'pickup' ? `${name} says it’s ready` : name === 'Your neighbor' ? 'they arrive' : `${name} arrives`}.
               </Txt>
             ) : null}
             {remaining <= 0 ? (
@@ -101,8 +110,8 @@ export default function RequestStatusScreen() {
         {r.status === 'arriving' ? (
           <HandoffQR
             code={r.code}
-            title={`${name} is at your door`}
-            body={rent ? `Check it works, then let ${name} scan this. Your rental starts on scan.` : `Check the seal, then let ${name} scan this. Payment is released on scan.`}
+            title={f === 'dropoff' ? `${name} is at your door` : f === 'lobby' ? `${name} is in the lobby` : `${name} is ready for you`}
+            body={`${f === 'pickup' && r.sellerRoom ? `Head to Room ${r.sellerRoom}. ` : ''}${rent ? `Check it works, then let ${name} scan this. Your rental starts on scan.` : `Check the seal, then let ${name} scan this. Payment is released on scan.`}`}
           />
         ) : null}
 
@@ -165,8 +174,39 @@ export default function RequestStatusScreen() {
   );
 }
 
-function DelivererCard({ name, rating, rent }: { name: string; rating: number; rent: boolean }) {
+function WherePanel({ fulfillment, name, buyerRoom, sellerRoom }: { fulfillment: Fulfillment; name: string; buyerRoom?: string; sellerRoom?: string }) {
   const { colors } = useTheme();
+  const option = FULFILLMENT[fulfillment];
+  const line =
+    fulfillment === 'pickup'
+      ? sellerRoom
+        ? `Go to Room ${sellerRoom} to pick it up`
+        : 'Waiting for their room number…'
+      : fulfillment === 'lobby'
+        ? `${name} will meet you in the lobby`
+        : `${name} is bringing it to ${buyerRoom ? `Room ${buyerRoom}` : 'your door'}`;
+  return (
+    <Card highlight style={{ alignSelf: 'stretch', backgroundColor: colors.primarySoft }}>
+      <Row>
+        <View style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center' }}>
+          <Icon name={option.icon} size={22} tone="onPrimary" />
+        </View>
+        <View style={{ flex: 1 }}>
+          <Txt variant="caption" tone="muted">
+            {option.label.toUpperCase()}
+          </Txt>
+          <Txt variant="label">{line}</Txt>
+        </View>
+      </Row>
+    </Card>
+  );
+}
+
+function DelivererCard({ name, rating, rent, fulfillment }: { name: string; rating: number; rent: boolean; fulfillment: Fulfillment }) {
+  const { colors } = useTheme();
+  const status = rent
+    ? 'grabbing it now'
+    : { dropoff: 'checking the seal, then heading to your door', lobby: 'checking the seal, then heading to the lobby', pickup: 'checking the seal and getting it ready' }[fulfillment];
   return (
     <Card style={{ alignSelf: 'stretch' }}>
       <Row>
@@ -178,7 +218,7 @@ function DelivererCard({ name, rating, rent }: { name: string; rating: number; r
         <View style={{ flex: 1 }}>
           <Txt variant="label">{name} accepted</Txt>
           <Txt variant="caption" tone="muted">
-            ★ {rating.toFixed(1)} · UW verified · {rent ? 'grabbing it now' : 'checking the seal, then heading over'}
+            ★ {rating.toFixed(1)} · UW verified · {status}
           </Txt>
         </View>
       </Row>

@@ -1,7 +1,7 @@
 import { LinearGradient } from 'expo-linear-gradient';
 import { View } from 'react-native';
 
-import { Button, Card, Divider, Row, Screen, SectionHeader, Txt } from '@/components/ui';
+import { Button, Card, Divider, Icon, Row, Screen, SectionHeader, StateBadge, Txt } from '@/components/ui';
 import { money } from '@/data/pricing';
 import { useStore } from '@/store/app-store';
 import { radius, space, useTheme } from '@/theme';
@@ -17,8 +17,9 @@ const when = (at: number) => {
 export default function Wallet() {
   const { colors } = useTheme();
   const { state } = useStore();
-  const balance = state.wallet.reduce((s, w) => s + w.amount, 0);
-  const spent = state.requests.filter((r) => r.status === 'delivered').reduce((s, r) => s + r.price.total, 0);
+  // Earned = money from selling and lending; spent = what you paid as a buyer or renter.
+  const earned = state.wallet.filter((w) => w.kind === 'earn').reduce((s, w) => s + w.amount, 0);
+  const spent = state.wallet.filter((w) => w.kind === 'spend').reduce((s, w) => s - w.amount, 0);
 
   return (
     <Screen>
@@ -32,10 +33,10 @@ export default function Wallet() {
           AVAILABLE TO CASH OUT
         </Txt>
         <Txt variant="hero" tone="onPrimary" style={{ fontSize: 48, lineHeight: 54 }}>
-          {money(balance)}
+          {money(earned)}
         </Txt>
         <Row style={{ marginTop: space.lg }}>
-          <Button label="Cash out" kind="accent" onPress={() => {}} style={{ flex: 1, height: 48 }} />
+          <Button label="Cash out" kind="accent" icon="cash" onPress={() => {}} style={{ flex: 1, height: 48 }} />
         </Row>
         <Txt variant="caption" tone="onPrimary" style={{ opacity: 0.7, marginTop: space.sm }}>
           Payouts go to your bank via Stripe. Coming soon.
@@ -44,40 +45,63 @@ export default function Wallet() {
 
       <Row style={{ marginTop: space.md }} gap={space.md}>
         <Card style={{ flex: 1 }}>
-          <Txt variant="caption" tone="muted">
-            Earned all time
-          </Txt>
+          <Row gap={6}>
+            <Icon name="arrow-down-circle" size={16} tone="success" />
+            <Txt variant="caption" tone="muted">
+              Earned
+            </Txt>
+          </Row>
           <Txt variant="heading" tone="success">
-            {money(balance)}
+            {money(earned)}
           </Txt>
         </Card>
         <Card style={{ flex: 1 }}>
-          <Txt variant="caption" tone="muted">
-            Spent on Lobb
-          </Txt>
+          <Row gap={6}>
+            <Icon name="arrow-up-circle" size={16} tone="danger" />
+            <Txt variant="caption" tone="muted">
+              Spent
+            </Txt>
+          </Row>
           <Txt variant="heading">{money(spent)}</Txt>
         </Card>
       </Row>
 
-      <SectionHeader title="History" />
-      <Card>
-        {state.wallet.map((w, i) => (
-          <View key={w.id}>
-            {i > 0 ? <Divider /> : null}
-            <Row style={{ justifyContent: 'space-between' }}>
-              <View>
-                <Txt variant="label">{w.label}</Txt>
-                <Txt variant="caption" tone="muted">
-                  {when(w.at)}
+      <SectionHeader title="History" subtitle="Everything you bought, rented, sold and lent" />
+      {state.wallet.length === 0 ? (
+        <View style={{ alignItems: 'center', gap: space.md, paddingVertical: space.xl }}>
+          <StateBadge icon="receipt" tone="muted" size={72} />
+          <Txt tone="muted" center>
+            Nothing yet. Your first order or sale will show up here.
+          </Txt>
+        </View>
+      ) : (
+        <Card>
+          {state.wallet.map((w, i) => (
+            <View key={w.id}>
+              {i > 0 ? <Divider /> : null}
+              <Row style={{ justifyContent: 'space-between' }}>
+                <Row style={{ flex: 1 }}>
+                  <View style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: w.kind === 'earn' ? colors.successSoft : colors.surfaceHigh, alignItems: 'center', justifyContent: 'center' }}>
+                    <Icon name={w.kind === 'earn' ? 'arrow-down' : 'arrow-up'} size={18} color={w.kind === 'earn' ? colors.success : colors.textMuted} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Txt variant="label" numberOfLines={1}>
+                      {w.label}
+                    </Txt>
+                    <Txt variant="caption" tone="muted">
+                      {when(w.at)}
+                    </Txt>
+                  </View>
+                </Row>
+                <Txt variant="label" tone={w.kind === 'earn' ? 'success' : 'default'}>
+                  {w.amount > 0 ? '+' : '−'}
+                  {money(Math.abs(w.amount))}
                 </Txt>
-              </View>
-              <Txt variant="label" tone="success">
-                +{money(w.amount)}
-              </Txt>
-            </Row>
-          </View>
-        ))}
-      </Card>
+              </Row>
+            </View>
+          ))}
+        </Card>
+      )}
     </Screen>
   );
 }

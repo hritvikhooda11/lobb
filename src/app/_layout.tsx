@@ -5,6 +5,7 @@ import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
 import { ActivityIndicator, View } from 'react-native';
 
+import { SellerAlerts } from '@/components/seller-alerts';
 import { SetupNeeded } from '@/components/setup-needed';
 import { supabaseConfigured } from '@/lib/supabase';
 import { AppStoreProvider, useStore } from '@/store/app-store';
@@ -22,8 +23,10 @@ function RootStack() {
       </View>
     );
   }
-  const signedIn = !!state.userId && !!state.profile?.communityId;
+  // Building AND room number are required, so accounts made before rooms existed are asked once.
+  const signedIn = !!state.userId && !!state.profile?.communityId && !!state.profile?.room;
   return (
+    <>
     <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.bg } }}>
       <Stack.Protected guard={!signedIn}>
         <Stack.Screen name="onboarding" />
@@ -37,6 +40,8 @@ function RootStack() {
         <Stack.Screen name="list-item" options={{ presentation: 'modal' }} />
       </Stack.Protected>
     </Stack>
+    {signedIn ? <SellerAlerts /> : null}
+    </>
   );
 }
 

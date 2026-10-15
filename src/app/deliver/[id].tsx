@@ -6,7 +6,7 @@ import { Pressable, View } from 'react-native';
 import { BarcodeScanner } from '@/components/barcode-scanner';
 import { CountdownRing } from '@/components/live';
 import { Button, Card, Icon, ItemBadge, Pill, Row, Screen, StateBadge, Txt, tap, type IconName } from '@/components/ui';
-import { money } from '@/data/pricing';
+import { FULFILLMENT, money } from '@/data/pricing';
 import { attempt, showError } from '@/lib/alert';
 import { takePhoto, type Photo } from '@/lib/photo';
 import { DELIVERY_WINDOW_MS, useItem, useNow, useStore, type Job } from '@/store/app-store';
@@ -69,7 +69,8 @@ export default function Deliver() {
             {item.name} {rent ? 'to' : 'for'} {job.buyerName}
           </Txt>
           <Txt variant="caption" tone="muted">
-            {job.location}
+            {FULFILLMENT[job.fulfillment].label}
+            {job.buyerRoom ? ` · Room ${job.buyerRoom}` : ''}
             {rent ? ` · ${job.rentalLabel} rental` : ''}
           </Txt>
         </View>
@@ -219,23 +220,53 @@ function Handoff({ job }: { job: Job }) {
   const [photo, setPhoto] = useState<Photo | null>(null);
   const [busy, setBusy] = useState(false);
   const arrived = job.status === 'arrived';
+  const f = job.fulfillment;
+  const option = FULFILLMENT[f];
+
+  const title = arrived
+    ? f === 'pickup'
+      ? `Waiting for ${job.buyerName}`
+      : `Hand it to ${job.buyerName}`
+    : f === 'pickup'
+      ? `${job.buyerName} is coming to you`
+      : f === 'lobby'
+        ? `Meet ${job.buyerName} in the lobby`
+        : `Head to ${job.buyerName}`;
+  const where =
+    f === 'dropoff'
+      ? job.buyerRoom
+        ? `Room ${job.buyerRoom}`
+        : 'Their door'
+      : f === 'lobby'
+        ? 'The lobby'
+        : job.myRoom
+          ? `Your room (${job.myRoom})`
+          : 'Your room';
+  const readyLabel = f === 'dropoff' ? "I'm at their door" : f === 'lobby' ? "I'm in the lobby" : "I'm ready, send them over";
 
   return (
     <View style={{ marginTop: space.xl, gap: space.md }}>
-      <Txt variant="title">{arrived ? `Hand it to ${job.buyerName}` : `Head to ${job.buyerName}`}</Txt>
+      <Txt variant="title">{title}</Txt>
       <Card>
         <Row gap={6}>
-          <Icon name="location" size={16} tone="primary" />
-          <Txt variant="label">{job.location}</Txt>
+          <Icon name={option.icon} size={16} tone="primary" />
+          <Txt variant="label">
+            {option.label} · {where}
+          </Txt>
         </Row>
+        {job.location ? (
+          <Txt variant="caption" tone="muted" style={{ marginTop: 4 }}>
+            Note from {job.buyerName}: “{job.location}”
+          </Txt>
+        ) : null}
         <Txt variant="caption" tone="muted" style={{ marginTop: 4 }}>
           {job.buyerName} will show a QR code. Scan it, then snap a quick photo of the handoff.
         </Txt>
       </Card>
       {!arrived ? (
         <Button
-          label={busy ? 'Letting them know…' : "I'm at their door"}
-          icon="home"
+          label={busy ? 'Letting them know…' : readyLabel}
+          icon={option.icon}
           disabled={busy}
           onPress={async () => {
             setBusy(true);

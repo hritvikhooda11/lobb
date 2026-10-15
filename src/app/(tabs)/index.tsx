@@ -2,10 +2,11 @@ import { router } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { Pressable, ScrollView, Switch, TextInput, View } from 'react-native';
 
+import { AlertDot, useIncomingCount } from '@/components/seller-alerts';
 import { CategoryCircles, ItemGrid, ItemRow, PromoCarousel } from '@/components/shop';
-import { Button, Card, Icon, IconButton, ItemBadge, Pill, Row, Screen, SectionHeader, Txt, tap, type IconName } from '@/components/ui';
+import { Button, Card, Icon, IconButton, ItemBadge, Pill, Row, Screen, SectionHeader, StateBadge, Txt, tap, type IconName } from '@/components/ui';
 import { canRent, categories, communities, type CategoryId, type ItemKind } from '@/data/catalog';
-import { money, priceFor, rentPerDay, sellerEarnings } from '@/data/pricing';
+import { FULFILLMENT, money, priceFor, rentPerDay, sellerEarnings } from '@/data/pricing';
 import { attempt } from '@/lib/alert';
 import { LIVE_STATUSES, useItem, useStore } from '@/store/app-store';
 import { fonts, radius, space, useTheme } from '@/theme';
@@ -37,6 +38,7 @@ export default function Home() {
 
 function ModeToggle({ mode, onChange }: { mode: Mode; onChange: (m: Mode) => void }) {
   const { colors } = useTheme();
+  const waiting = useIncomingCount();
   const options: { id: Mode; label: string; icon: IconName }[] = [
     { id: 'buy', label: 'Buy', icon: 'bag-handle' },
     { id: 'rent', label: 'Rent', icon: 'repeat' },
@@ -58,6 +60,11 @@ function ModeToggle({ mode, onChange }: { mode: Mode; onChange: (m: Mode) => voi
             style={{ flex: 1, height: 42, borderRadius: radius.pill, backgroundColor: bg, flexDirection: 'row', gap: 6, alignItems: 'center', justifyContent: 'center' }}>
             <Icon name={icon} size={17} color={fg} />
             <Txt style={{ fontFamily: fonts.display, fontSize: 15, color: fg }}>{label}</Txt>
+            {id === 'sell' && waiting > 0 ? (
+              <View style={{ position: 'absolute', top: -4, right: 10 }}>
+                <AlertDot />
+              </View>
+            ) : null}
           </Pressable>
         );
       })}
@@ -67,14 +74,15 @@ function ModeToggle({ mode, onChange }: { mode: Mode; onChange: (m: Mode) => voi
 
 function Browse({ kind }: { kind: ItemKind }) {
   const { colors } = useTheme();
-  const { state } = useStore();
+  const { state, actions } = useStore();
   const [query, setQuery] = useState('');
   const [cat, setCat] = useState<CategoryId | null>(null);
   const live = state.requests.find((r) => LIVE_STATUSES.includes(r.status));
   const cats = categories.filter((c) => (kind === 'rent' ? canRent(c.id) : true));
   const community = communities.find((c) => c.id === state.profile?.communityId);
 
-  const all = useMemo(() => state.items.filter((i) => i.kind === kind), [state.items, kind]);
+  // Only items a neighbor can actually bring you right now. Sold out (or lent out) items leave the store.
+  const all = useMemo(() => state.items.filter((i) => i.kind === kind && i.nearbyCount > 0), [state.items, kind]);
   const filtering = !!query.trim() || !!cat;
   const results = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -105,10 +113,31 @@ function Browse({ kind }: { kind: ItemKind }) {
         ) : null}
       </Row>
 
-      {!filtering ? <PromoCarousel kind={kind} onPick={(c) => setCat(c ?? null)} /> : null}
-      <CategoryCircles kind={kind} cats={cats} active={cat} onPick={setCat} />
+      {all.length === 0 ? (
+        <View style={{ alignItems: 'center', gap: space.md, marginTop: space.xxl, paddingHorizontal: space.lg }}>
+          <StateBadge icon="storefront" tone="muted" />
+          <Txt variant="title" center>
+            Nothing listed yet
+          </Txt>
+          <Txt tone="muted" center>
+            {kind === 'buy' ? 'No one in your building has anything to sell right now.' : 'No one in your building is lending anything right now.'} Be the first: list something and your neighbors can request it.
+          </Txt>
+          <Button
+            label="List an item"
+            icon="add-circle"
+            onPress={() => {
+              actions.setMode('sell');
+              router.push('/list-item');
+            }}
+            style={{ alignSelf: 'stretch' }}
+          />
+        </View>
+      ) : null}
 
-      {filtering ? (
+      {all.length > 0 && !filtering ? <PromoCarousel kind={kind} onPick={(c) => setCat(c ?? null)} /> : null}
+      {all.length > 0 ? <CategoryCircles kind={kind} cats={cats} active={cat} onPick={setCat} /> : null}
+
+      {all.length === 0 ? null : filtering ? (
         <>
           <SectionHeader
             title={cat ? categories.find((c) => c.id === cat)!.label : `Results for “${query.trim()}”`}
@@ -182,7 +211,7 @@ function SellMode() {
   const { state, actions } = useStore();
   const incoming = state.jobs.filter((j) => j.status === 'incoming');
   const active = state.jobs.find((j) => ['accepted', 'verified', 'arrived', 'returning'].includes(j.status));
-  const today = state.wallet.filter((w) => Date.now() - w.at < 24 * 3600_000).reduce((s, w) => s + w.amount, 0);
+  const today = state.wallet.filter((w) => w.kind === 'earn' && Date.now() - w.at < 24 * 3600_000).reduce((s, w) => s + w.amount, 0);
   const activeItem = useItem(active?.itemId);
 
   return (
@@ -208,7 +237,7 @@ function SellMode() {
             <View style={{ flex: 1 }}>
               <Txt variant="label">{active.status === 'returning' ? `${active.buyerName} is returning it` : active.kind === 'rent' ? 'Lending in progress' : 'Delivery in progress'}</Txt>
               <Txt variant="caption" tone="muted">
-                {active.buyerName} · {active.location}
+                {active.buyerName} · {FULFILLMENT[active.fulfillment].label}
               </Txt>
             </View>
             <Icon name="chevron-forward" size={22} tone="primary" />
@@ -244,13 +273,15 @@ function IncomingCard({ jobId, blocked }: { jobId: string; blocked: boolean }) {
       <Row gap={space.sm} style={{ marginBottom: space.sm, flexWrap: 'wrap' }}>
         {job.priority ? <Pill icon="star" label="MATCHES YOUR LISTING" tone="primary" /> : null}
         {job.kind === 'rent' ? <Pill icon="repeat" label={`RENT · ${job.rentalLabel}`} tone="warning" /> : null}
+        <Pill icon={FULFILLMENT[job.fulfillment].icon} label={FULFILLMENT[job.fulfillment].label.toUpperCase()} tone="accent" />
       </Row>
       <Row>
         <ItemBadge item={item} />
         <View style={{ flex: 1 }}>
           <Txt variant="label">{item.name}</Txt>
           <Txt variant="caption" tone="muted">
-            {job.buyerName} · {job.location}
+            {job.buyerName}
+            {job.location ? ` · “${job.location}”` : ''}
           </Txt>
         </View>
         <View style={{ alignItems: 'flex-end' }}>
@@ -283,8 +314,9 @@ function ListingRow({ itemId }: { itemId: string }) {
   const item = useItem(itemId);
   if (!item) return null;
   const earn = item.kind === 'buy' ? `Earn ${money(sellerEarnings(item, l.adjustPct))} each` : `${money(rentPerDay(item, l.adjustPct))}/day`;
+  const soldOut = item.kind === 'buy' && l.quantity === 0;
   return (
-    <Card style={{ paddingVertical: space.md, opacity: l.active ? 1 : 0.55 }}>
+    <Card style={{ paddingVertical: space.md, opacity: l.active && !soldOut ? 1 : 0.6 }}>
       <Row>
         <ItemBadge item={item} size={44} />
         <View style={{ flex: 1, gap: 2 }}>
@@ -297,7 +329,14 @@ function ListingRow({ itemId }: { itemId: string }) {
           </Txt>
         </View>
         {item.kind === 'rent' ? <Pill label="RENT" tone="warning" /> : null}
-        <Switch value={l.active} onValueChange={() => void attempt(() => actions.toggleListing(l.itemId))} trackColor={{ true: colors.accent, false: colors.surfaceHigh }} thumbColor="#fff" />
+        {soldOut ? (
+          <Row gap={space.sm}>
+            <Pill label="SOLD OUT" tone="danger" />
+            <IconButton icon="add" tone="accent" size={36} onPress={() => void attempt(() => actions.addListing(l.itemId, l.adjustPct))} />
+          </Row>
+        ) : (
+          <Switch value={l.active} onValueChange={() => void attempt(() => actions.toggleListing(l.itemId))} trackColor={{ true: colors.accent, false: colors.surfaceHigh }} thumbColor="#fff" />
+        )}
       </Row>
     </Card>
   );

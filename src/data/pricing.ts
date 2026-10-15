@@ -15,24 +15,47 @@ export const MAX_ADJUST_PCT = 5;
 const round5 = (cents: number) => Math.round(cents / 5) * 5;
 export const clampAdjust = (pct: number) => Math.max(-MAX_ADJUST_PCT, Math.min(MAX_ADJUST_PCT, Math.round(pct)));
 
+// ── Delivery options ───────────────────────────────────────────────────────
+
+export type Fulfillment = 'dropoff' | 'lobby' | 'pickup';
+
+/** Lobby meetup is the base price; door drop-off costs more, pickup costs less (mirrors SQL fulfillment_pct). */
+export const FULFILLMENT: Record<Fulfillment, { label: string; short: string; pct: number; icon: 'home' | 'people' | 'walk' }> = {
+  dropoff: { label: 'Door drop-off', short: 'Drop-off', pct: 15, icon: 'home' },
+  lobby: { label: 'Lobby meetup', short: 'Lobby', pct: 0, icon: 'people' },
+  pickup: { label: 'Pickup', short: 'Pickup', pct: -10, icon: 'walk' },
+};
+
+export const FULFILLMENT_ORDER: Fulfillment[] = ['dropoff', 'lobby', 'pickup'];
+
+/** Rounds to the nearest 5¢, away from zero, so -22.5 → -25 exactly like Postgres (Math.round alone would give -20). */
+const round5Signed = (cents: number) => Math.sign(cents) * Math.round(Math.abs(cents) / 5) * 5;
+
+/** Extra (or discount) in cents for a delivery option on top of a base total. */
+export const fulfillmentAdjust = (baseTotal: number, f: Fulfillment) => round5Signed((baseTotal * FULFILLMENT[f].pct) / 100);
+
 export type PriceBreakdown = {
   item: number;
   deliverer: number;
   platform: number;
+  /** Delivery-option difference in cents: positive for door drop-off, negative for pickup. */
+  fulfillment: number;
   total: number;
 };
 
-/** Buy price. `adjustPct` is the seller's ±5% nudge on the item price. */
-export function priceFor(item: Item, adjustPct = 0): PriceBreakdown {
+/** Buy price. `adjustPct` is the seller's ±5% nudge on the item price; `f` is the delivery option. */
+export function priceFor(item: Item, adjustPct = 0, f: Fulfillment = 'lobby'): PriceBreakdown {
   const itemPrice = round5(item.marketPrice * (1 + clampAdjust(adjustPct) / 100));
   const deliverer = Math.max(DELIVERER_MIN, round5(itemPrice * DELIVERER_RATE));
-  return { item: itemPrice, deliverer, platform: PLATFORM_FEE, total: itemPrice + deliverer + PLATFORM_FEE };
+  const base = itemPrice + deliverer + PLATFORM_FEE;
+  const fulfillment = fulfillmentAdjust(base, f);
+  return { item: itemPrice, deliverer, platform: PLATFORM_FEE, fulfillment, total: base + fulfillment };
 }
 
-/** What a seller receives: reimbursed for the item plus the delivery cut. */
-export function sellerEarnings(item: Item, adjustPct = 0) {
-  const p = priceFor(item, adjustPct);
-  return p.item + p.deliverer;
+/** What a seller receives: reimbursed for the item plus the delivery cut (and the option's difference). */
+export function sellerEarnings(item: Item, adjustPct = 0, f: Fulfillment = 'lobby') {
+  const p = priceFor(item, adjustPct, f);
+  return p.item + p.deliverer + p.fulfillment;
 }
 
 // ── Rentals ────────────────────────────────────────────────────────────────
@@ -53,14 +76,17 @@ export function rentPerDay(item: Item, adjustPct = 0) {
 export type RentalBreakdown = {
   rent: number;
   platform: number;
+  fulfillment: number;
   total: number;
   /** Card hold for the item's value, released when it's returned. */
   hold: number;
 };
 
-export function rentalPriceFor(item: Item, duration: RentalDuration, adjustPct = 0): RentalBreakdown {
+export function rentalPriceFor(item: Item, duration: RentalDuration, adjustPct = 0, f: Fulfillment = 'lobby'): RentalBreakdown {
   const rent = Math.max(100, round5(rentPerDay(item, adjustPct) * duration.dayMultiplier));
-  return { rent, platform: PLATFORM_FEE, total: rent + PLATFORM_FEE, hold: item.marketPrice };
+  const base = rent + PLATFORM_FEE;
+  const fulfillment = fulfillmentAdjust(base, f);
+  return { rent, platform: PLATFORM_FEE, fulfillment, total: base + fulfillment, hold: item.marketPrice };
 }
 
 /** Rough offline estimate by category, used when the AI price lookup is unavailable. */

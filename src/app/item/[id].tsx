@@ -3,8 +3,8 @@ import { useState } from 'react';
 import { Pressable, ScrollView, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { Button, Divider, ItemPhoto, Pill, Row, Txt, tap } from '@/components/ui';
-import { money, priceFor, rentalDurations, rentalPriceFor } from '@/data/pricing';
+import { Button, Divider, Icon, ItemPhoto, Pill, Row, Txt, tap } from '@/components/ui';
+import { FULFILLMENT, FULFILLMENT_ORDER, money, priceFor, rentalDurations, rentalPriceFor, type Fulfillment } from '@/data/pricing';
 import { attempt } from '@/lib/alert';
 import { LIVE_STATUSES, useItem, useStore } from '@/store/app-store';
 import { radius, space, useTheme } from '@/theme';
@@ -14,7 +14,8 @@ export default function ConfirmRequest() {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const { state, actions } = useStore();
-  const [note, setNote] = useState('My door');
+  const [note, setNote] = useState('');
+  const [fulfillment, setFulfillment] = useState<Fulfillment>('lobby');
   const [durationId, setDurationId] = useState(rentalDurations[1].id);
   const [busy, setBusy] = useState(false);
   const item = useItem(id);
@@ -22,10 +23,21 @@ export default function ConfirmRequest() {
 
   const rent = item.kind === 'rent';
   const duration = rentalDurations.find((d) => d.id === durationId)!;
-  const price = priceFor(item);
-  const rental = rentalPriceFor(item, duration);
+  const price = priceFor(item, 0, fulfillment);
+  const rental = rentalPriceFor(item, duration, 0, fulfillment);
   const total = rent ? rental.total : price.total;
+  const adjust = rent ? rental.fulfillment : price.fulfillment;
+  const totalFor = (f: Fulfillment) => (rent ? rentalPriceFor(item, duration, 0, f).total : priceFor(item, 0, f).total);
+  const baseTotal = totalFor('lobby');
   const hasLive = state.requests.some((r) => LIVE_STATUSES.includes(r.status));
+  const soldOut = item.nearbyCount === 0;
+  const myRoom = state.profile?.room;
+
+  const optionInfo: Record<Fulfillment, string> = {
+    dropoff: myRoom ? `A neighbor brings it to Room ${myRoom}` : 'A neighbor brings it to your door',
+    lobby: 'Meet a neighbor in the lobby',
+    pickup: 'You go to their room (we’ll tell you which once they accept)',
+  };
 
   return (
     <ScrollView style={{ backgroundColor: colors.bg }} contentContainerStyle={{ padding: space.xl, paddingBottom: insets.bottom + space.xl }} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">
@@ -67,6 +79,52 @@ export default function ConfirmRequest() {
         </View>
       ) : null}
 
+      <View style={{ marginTop: space.xl, gap: space.sm }}>
+        <Txt variant="label">How do you want it?</Txt>
+        {FULFILLMENT_ORDER.map((f) => {
+          const active = f === fulfillment;
+          const option = FULFILLMENT[f];
+          const diff = totalFor(f) - baseTotal;
+          return (
+            <Pressable
+              key={f}
+              onPress={() => {
+                tap();
+                setFulfillment(f);
+              }}
+              style={({ pressed }) => ({
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: space.md,
+                padding: space.md,
+                borderRadius: radius.md,
+                backgroundColor: active ? colors.primarySoft : colors.surface,
+                borderWidth: 1.5,
+                borderColor: active ? colors.primary : colors.border,
+                transform: [{ scale: pressed ? 0.98 : 1 }],
+              })}>
+              <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: active ? colors.primary : colors.surfaceHigh, alignItems: 'center', justifyContent: 'center' }}>
+                <Icon name={option.icon} size={20} color={active ? colors.onPrimary : colors.textMuted} />
+              </View>
+              <View style={{ flex: 1, gap: 2 }}>
+                <Txt variant="label" tone={active ? 'primary' : 'default'}>
+                  {option.label}
+                </Txt>
+                <Txt variant="caption" tone="muted">
+                  {optionInfo[f]}
+                </Txt>
+              </View>
+              <View style={{ alignItems: 'flex-end' }}>
+                <Txt variant="label">{money(totalFor(f))}</Txt>
+                <Txt variant="caption" tone={diff < 0 ? 'success' : diff > 0 ? 'warning' : 'muted'}>
+                  {diff === 0 ? 'Base price' : diff < 0 ? `Save ${money(-diff)}` : `+${money(diff)}`}
+                </Txt>
+              </View>
+            </Pressable>
+          );
+        })}
+      </View>
+
       <View style={{ marginTop: space.xl, backgroundColor: colors.surface, borderRadius: radius.lg, padding: space.lg, borderWidth: 1, borderColor: colors.border }}>
         {rent ? (
           <>
@@ -80,6 +138,7 @@ export default function ConfirmRequest() {
             <PriceRow label="Lobb fee" value={money(price.platform)} />
           </>
         )}
+        {adjust !== 0 ? <PriceRow label={adjust > 0 ? `${FULFILLMENT[fulfillment].label} (+${FULFILLMENT[fulfillment].pct}%)` : `Pickup discount (${FULFILLMENT[fulfillment].pct}%)`} value={`${adjust > 0 ? '+' : '−'}${money(Math.abs(adjust))}`} tone={adjust < 0 ? 'success' : undefined} /> : null}
         <Divider />
         <PriceRow label="Total" value={money(total)} bold />
         <Txt variant="caption" tone="muted" style={{ marginTop: space.sm }}>
@@ -90,26 +149,28 @@ export default function ConfirmRequest() {
       </View>
 
       <Txt variant="label" style={{ marginTop: space.xl, marginBottom: space.sm }}>
-        Meet at
+        Note for your neighbor (optional)
       </Txt>
       <TextInput
         value={note}
         onChangeText={setNote}
-        placeholder="Unit 1204, or lobby"
+        placeholder="e.g. knock twice"
         placeholderTextColor={colors.textMuted}
+        maxLength={80}
+        returnKeyType="done"
         style={{ height: 50, borderRadius: radius.md, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, paddingHorizontal: space.lg, color: colors.text, fontSize: 16 }}
       />
 
       <Button
-        label={hasLive ? 'Finish your current request first' : `${rent ? 'Borrow it' : 'Lobb it'} · ${money(total)}`}
-        icon={hasLive ? undefined : rent ? 'repeat' : 'flash'}
-        disabled={hasLive || busy}
+        label={soldOut ? 'No one has this right now' : hasLive ? 'Finish your current request first' : `${rent ? 'Borrow it' : 'Lobb it'} · ${money(total)}`}
+        icon={soldOut || hasLive ? undefined : rent ? 'repeat' : 'flash'}
+        disabled={hasLive || busy || soldOut}
         style={{ marginTop: space.xl }}
         onPress={async () => {
           setBusy(true);
           let requestId = '';
           const ok = await attempt(async () => {
-            requestId = await actions.createRequest(item, note.trim() || 'My door', rent ? durationId : undefined);
+            requestId = await actions.createRequest(item, note.trim(), fulfillment, rent ? durationId : undefined);
           });
           setBusy(false);
           if (!ok) return;
@@ -125,7 +186,7 @@ export default function ConfirmRequest() {
 function PriceRow({ label, value, tone, bold }: { label: string; value: string; tone?: 'success'; bold?: boolean }) {
   return (
     <Row style={{ justifyContent: 'space-between', paddingVertical: 4 }}>
-      <Txt tone={bold ? 'default' : 'muted'} variant={bold ? 'heading' : 'body'}>
+      <Txt tone={bold ? 'default' : 'muted'} variant={bold ? 'heading' : 'body'} style={{ flexShrink: 1 }}>
         {label}
       </Txt>
       <Txt tone={tone ?? 'default'} variant={bold ? 'heading' : 'body'}>

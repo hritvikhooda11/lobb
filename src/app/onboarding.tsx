@@ -30,7 +30,8 @@ export default function Onboarding() {
   const [code, setCode] = useState('');
   const [codeSent, setCodeSent] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [communityId, setCommunityId] = useState<string | null>(null);
+  const [communityId, setCommunityId] = useState<string | null>(state.profile?.communityId ?? null);
+  const [room, setRoom] = useState(state.profile?.room ?? '');
 
   const step = state.userId ? 'community' : codeSent ? 'code' : 'email';
 
@@ -151,7 +152,7 @@ export default function Onboarding() {
           <View style={{ gap: space.md }}>
             <Txt variant="heading">Where do you live?</Txt>
             <Txt variant="body" tone="muted">
-              Requests only go to neighbors in your community.
+              Requests only go to neighbors in your building.
             </Txt>
             {communities.map((c) => {
               const selected = c.id === communityId;
@@ -164,13 +165,34 @@ export default function Onboarding() {
                 </Card>
               );
             })}
+            <View style={{ gap: space.sm, marginTop: space.sm }}>
+              <Txt variant="label">Your room number</Txt>
+              <TextInput
+                value={room}
+                onChangeText={(t) => setRoom(t.toUpperCase().slice(0, 12))}
+                placeholder="e.g. 912 or 4B"
+                placeholderTextColor={colors.textMuted}
+                autoCapitalize="characters"
+                autoCorrect={false}
+                returnKeyType="done"
+                onSubmitEditing={() => Keyboard.dismiss()}
+                style={inputStyle(room.trim().length > 0)}
+              />
+              <Row gap={6} style={{ alignItems: 'flex-start' }}>
+                <Icon name="lock-closed" size={13} tone="muted" />
+                <Txt variant="caption" tone="muted" style={{ flex: 1 }}>
+                  Private. Only the neighbor delivering to you sees it, and only after they accept. Used for door drop-offs.
+                </Txt>
+              </Row>
+            </View>
             <Button
               label={busy ? 'Saving…' : "Let's go"}
               icon="arrow-forward"
-              disabled={!communityId || busy}
+              disabled={!communityId || !room.trim() || busy}
               onPress={() => {
                 tap('success');
-                run(() => actions.setCommunity(communityId!));
+                Keyboard.dismiss();
+                run(() => actions.setHome(communityId!, room.trim()));
               }}
               style={{ marginTop: space.sm }}
             />
