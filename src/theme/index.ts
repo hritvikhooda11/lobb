@@ -91,6 +91,7 @@ export const categoryTint = {
   electronics: '#8B5CF6',
   household: '#3DDC97',
   instant: '#FF8A4C',
+  alcohol: '#E8566C',
 } as const;
 
 export const fonts = {

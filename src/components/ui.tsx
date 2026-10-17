@@ -24,6 +24,7 @@ export const categoryIcon: Record<CategoryId, IconName> = {
   toiletries: 'sparkles',
   electronics: 'battery-charging',
   household: 'home',
+  alcohol: 'beer',
 };
 
 /** Soft drop shadow for light mode; dark mode uses a hairline border instead. */

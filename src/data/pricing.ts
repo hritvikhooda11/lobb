@@ -97,6 +97,30 @@ export const fallbackRetailPrice: Record<Item['category'], number> = {
   toiletries: 399,
   electronics: 1499,
   household: 999,
+  alcohol: 299,
 };
+
+// ── Seller-set prices (mirrors SQL price_within_limits) ────────────────────
+
+/** Past this, the app warns that buyers may skip it. */
+export const PRICE_WARN_PCT = 15;
+/** Past this, the database refuses the price. */
+export const PRICE_MAX_PCT = 50;
+
+export type PriceCheck = { level: 'ok' | 'warn' | 'blocked'; pct: number };
+
+/** How far a seller's price is from the Lobb (store) price. */
+export function checkPrice(price: number, lobbPrice: number): PriceCheck {
+  const pct = Math.round(((price - lobbPrice) / lobbPrice) * 100);
+  const inLimits = price >= Math.ceil(lobbPrice * 0.5) && price <= Math.floor(lobbPrice * 1.5);
+  return { pct, level: !inLimits ? 'blocked' : Math.abs(pct) > PRICE_WARN_PCT ? 'warn' : 'ok' };
+}
+
+// ── Shout-outs ─────────────────────────────────────────────────────────────
+
+/** The poster names an all-in price; Lobb keeps its usual fee and the neighbor gets the rest. */
+export const SHOUTOUT_MIN = 100;
+export const SHOUTOUT_MAX = 5000;
+export const shoutoutPayout = (offer: number) => offer - PLATFORM_FEE;
 
 export const money = (cents: number) => `$${(cents / 100).toFixed(2)}`;

@@ -4,7 +4,9 @@
  * Two kinds of items:
  *  - `buy`:  factory-sealed, shelf-stable, non-TCS goods (PRODUCT_CONTEXT §8).
  *  - `rent`: non-edible items (chargers, calculators, umbrellas…) borrowed and returned.
- * No alcohol, tobacco, vapes, cannabis, medications, or age-restricted items.
+ * Alcohol is its own 21+ section: only Lobb admins can sell it, buyers must be 21+, the seller
+ * checks ID at the handoff, and it stays off in a building until Lobb enables it there.
+ * Never allowed: tobacco, vapes, cannabis, medications.
  *
  * Photos live in assets/items (credits in assets/items/CREDITS.md).
  */
@@ -15,7 +17,7 @@ import type { categoryTint } from '@/theme';
 export type CategoryId = keyof typeof categoryTint;
 export type ItemKind = 'buy' | 'rent';
 
-export type Category = { id: CategoryId; label: string; emoji: string; edible: boolean };
+export type Category = { id: CategoryId; label: string; emoji: string; edible: boolean; ageRestricted?: boolean };
 
 export const categories: Category[] = [
   { id: 'snacks', label: 'Snacks', emoji: '🍿', edible: true },
@@ -24,12 +26,16 @@ export const categories: Category[] = [
   { id: 'toiletries', label: 'Toiletries', emoji: '🧴', edible: false },
   { id: 'electronics', label: 'Tech', emoji: '🔌', edible: false },
   { id: 'household', label: 'Household', emoji: '🧻', edible: false },
+  { id: 'alcohol', label: 'Alcohol 21+', emoji: '🍺', edible: true, ageRestricted: true },
 ];
 
 export const getCategory = (id: CategoryId) => categories.find((c) => c.id === id)!;
 
 /** Rentals: anything non-edible except toiletries (hygiene). */
 export const canRent = (category: CategoryId) => !getCategory(category).edible && category !== 'toiletries';
+
+/** Categories anyone can shout out for (never alcohol). */
+export const shoutoutCategories = categories.filter((c) => !c.ageRestricted);
 
 export type Item = {
   id: string;
@@ -46,6 +52,13 @@ export type Item = {
   nearbyCount: number;
   /** Set when a user added this item themselves. */
   addedByMe?: boolean;
+  /** The Lobb (store) price when the seller set their own price. */
+  lobbPrice?: number;
+  /** Where the store price was checked, e.g. "Target", with a link when there is one. */
+  priceSource?: string;
+  priceSourceUrl?: string;
+  /** One-off item from a shout-out: never shown in the store. */
+  special?: boolean;
 };
 
 export const catalog: Item[] = [

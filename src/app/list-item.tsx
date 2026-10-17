@@ -1,5 +1,6 @@
 import { Image } from 'expo-image';
 import { router } from 'expo-router';
+import * as WebBrowser from 'expo-web-browser';
 import { useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -9,8 +10,8 @@ import type { PriceResponse } from '@/app/api/price+api';
 import { BarcodeScanner } from '@/components/barcode-scanner';
 import { Button, Card, categoryIcon, Icon, ItemBadge, Pill, Row, Txt, tap } from '@/components/ui';
 import { canRent, categories, findByBarcode, findDuplicate, getCategory, type CategoryId, type Item, type ItemKind } from '@/data/catalog';
-import { MAX_ADJUST_PCT, money, rentPerDay, sellerEarnings } from '@/data/pricing';
-import { attempt, showError } from '@/lib/alert';
+import { checkPrice, MAX_ADJUST_PCT, money, PRICE_MAX_PCT, PRICE_WARN_PCT, rentPerDay, sellerEarnings } from '@/data/pricing';
+import { attempt, confirm, showError } from '@/lib/alert';
 import { takePhoto, type Photo } from '@/lib/photo';
 import { supabase } from '@/lib/supabase';
 import { useStore } from '@/store/app-store';
@@ -28,7 +29,8 @@ export default function ListItem() {
   const [sealed, setSealed] = useState(false);
   const [pricing, setPricing] = useState<'idle' | 'loading'>('idle');
   const [quote, setQuote] = useState<PriceResponse | null>(null);
-  const [adjust, setAdjust] = useState(0);
+  /** The seller's own price in cents (null = use the Lobb price). */
+  const [customPrice, setCustomPrice] = useState<number | null>(null);
   const [scannerOpen, setScannerOpen] = useState(false);
   const [lookingUp, setLookingUp] = useState(false);
   const [scan, setScan] = useState<BarcodeResponse | null>(null);
@@ -37,13 +39,14 @@ export default function ListItem() {
     () => (scan && findByBarcode(state.items, scan.barcode, kind)) || (name.trim().length >= 3 ? findDuplicate(state.items, name, kind) : undefined),
     [state.items, name, kind, scan],
   );
-  const allowedCategories = categories.filter((c) => (kind === 'rent' ? canRent(c.id) : true));
+  // Alcohol: only Lobb admins can sell it.
+  const allowedCategories = categories.filter((c) => (kind === 'rent' ? canRent(c.id) : !c.ageRestricted || state.profile?.isAdmin));
   const needsSealCheck = kind === 'buy' && category !== null;
   const ready = name.trim().length >= 2 && photo && category && (!needsSealCheck || sealed);
 
   const resetQuote = () => {
     setQuote(null);
-    setAdjust(0);
+    setCustomPrice(null);
   };
 
   async function onScanned(code: string) {
@@ -101,13 +104,27 @@ export default function ListItem() {
 
   async function listNew() {
     if (!quote || !photo || !category) return;
+    const price = customPrice ?? quote.retailPriceCents;
+    const check = checkPrice(price, quote.retailPriceCents);
+    if (check.level === 'blocked') return;
+    if (check.level === 'warn') {
+      const above = check.pct > 0;
+      const sure = await confirm(
+        above ? `${check.pct}% above the store price` : `${-check.pct}% below the store price`,
+        above
+          ? `Stores sell this for about ${money(quote.retailPriceCents)}. Neighbors can see that, so they may skip yours at ${money(price)}.`
+          : `Stores sell this for about ${money(quote.retailPriceCents)}. You’ll earn less than it’s worth at ${money(price)}.`,
+        'List anyway',
+      );
+      if (!sure) return;
+    }
     if (!quote.quoteId) {
       showError('The pricing service isn’t connected to the database yet (SUPABASE_SERVICE_ROLE_KEY missing), so new items can’t be saved.');
       return;
     }
     setPricing('loading');
     const ok = await attempt(() =>
-      actions.createItem({ quoteId: quote.quoteId!, size: quote.size || (scan?.found ? scan.size : ''), barcode: scan?.barcode, photo }, adjust),
+      actions.createItem({ quoteId: quote.quoteId!, size: quote.size || (scan?.found ? scan.size : ''), barcode: scan?.barcode, photo, price: customPrice ?? undefined }),
     );
     setPricing('idle');
     if (!ok) return;
@@ -287,7 +304,7 @@ export default function ListItem() {
           ) : null}
           {pricing === 'loading' ? <ActivityIndicator color={colors.primary} /> : null}
 
-          {quote ? <QuoteCard quote={quote} kind={kind} category={category!} adjust={adjust} onAdjust={setAdjust} onList={listNew} /> : null}
+          {quote ? <QuoteCard quote={quote} kind={kind} category={category!} price={customPrice ?? quote.retailPriceCents} onPrice={setCustomPrice} onList={listNew} /> : null}
         </>
       )}
 
@@ -333,7 +350,7 @@ function DuplicateCard({ item, existingListing }: { item: Item; existingListing:
   );
 }
 
-function QuoteCard({ quote, kind, category, adjust, onAdjust, onList }: { quote: PriceResponse; kind: ItemKind; category: CategoryId; adjust: number; onAdjust: (n: number) => void; onList: () => void }) {
+function QuoteCard({ quote, kind, category, price, onPrice, onList }: { quote: PriceResponse; kind: ItemKind; category: CategoryId; price: number; onPrice: (cents: number | null) => void; onList: () => void }) {
   const { colors } = useTheme();
   if (!quote.eligible) {
     return (
@@ -345,21 +362,106 @@ function QuoteCard({ quote, kind, category, adjust, onAdjust, onList }: { quote:
       </Card>
     );
   }
-  const preview: Item = { id: 'preview', kind, name: quote.name, size: quote.size, category, emoji: '📦', marketPrice: quote.retailPriceCents, nearbyCount: 0 };
+  const check = checkPrice(price, quote.retailPriceCents);
+  const item: Item = { id: 'preview', kind, name: quote.name, size: quote.size, category, emoji: '📦', marketPrice: price, nearbyCount: 0 };
+  const earn = kind === 'buy' ? `You earn ${money(sellerEarnings(item))} per sale` : `Renters pay ${money(rentPerDay(item))}/day`;
   return (
     <Card style={{ gap: space.md }}>
       <Row style={{ justifyContent: 'space-between' }}>
         <Txt variant="label" tone="muted">
-          Lobb price
+          {kind === 'buy' ? 'Lobb price' : 'Retail value'}
         </Txt>
-        <Pill label={quote.estimated ? 'ESTIMATE' : `via ${quote.source}`} tone={quote.estimated ? 'warning' : 'success'} />
+        <Pill label={quote.estimated ? 'ESTIMATE' : `via ${quote.source}`} tone={quote.estimated ? 'warning' : 'success'} icon={quote.estimated ? 'alert-circle' : 'checkmark-circle'} />
       </Row>
+      <Txt style={{ fontFamily: fonts.display, fontSize: 34, lineHeight: 40 }}>{money(quote.retailPriceCents)}</Txt>
+      <SourceList quote={quote} />
+
+      <View style={{ gap: space.sm }}>
+        <Txt variant="label">{kind === 'buy' ? 'Your price' : 'Its value (sets the daily rate and deposit)'}</Txt>
+        <PriceInput cents={price} onChange={(c) => onPrice(c === quote.retailPriceCents ? null : c)} invalid={check.level === 'blocked'} />
+        {check.level === 'blocked' ? (
+          <Txt variant="caption" tone="danger">
+            That’s {Math.abs(check.pct)}% {check.pct > 0 ? 'above' : 'below'} the store price. Lobb only allows up to {PRICE_MAX_PCT}% either way ({money(Math.ceil(quote.retailPriceCents * 0.5))} to {money(Math.floor(quote.retailPriceCents * 1.5))}).
+          </Txt>
+        ) : check.level === 'warn' ? (
+          <Row gap={6} style={{ alignItems: 'flex-start' }}>
+            <Icon name="warning" size={16} tone="warning" />
+            <Txt variant="caption" tone="warning" style={{ flex: 1 }}>
+              {Math.abs(check.pct)}% {check.pct > 0 ? 'above' : 'below'} the store price. Buyers see the store price too, so prices more than {PRICE_WARN_PCT}% off usually don’t sell.
+            </Txt>
+          </Row>
+        ) : (
+          <Txt variant="caption" tone="muted">
+            {price === quote.retailPriceCents ? 'Matches the store price. You can change it.' : `${check.pct > 0 ? '+' : ''}${check.pct}% from the store price.`}
+          </Txt>
+        )}
+      </View>
+
+      <Txt variant="caption" tone="success">
+        {earn}
+      </Txt>
+      <Button label="List it" icon="rocket" kind="accent" onPress={onList} disabled={check.level === 'blocked'} />
+    </Card>
+  );
+}
+
+/** Every store the AI found the price at, with links. */
+function SourceList({ quote }: { quote: PriceResponse }) {
+  const { colors } = useTheme();
+  if (quote.estimated || quote.sources.length === 0) {
+    return (
       <Txt variant="caption" tone="muted">
         {quote.reason}
       </Txt>
-      <AdjustRow item={preview} adjust={adjust} onAdjust={onAdjust} />
-      <Button label="List it" icon="rocket" kind="accent" onPress={onList} />
-    </Card>
+    );
+  }
+  return (
+    <View style={{ gap: 6 }}>
+      <Txt variant="caption" tone="muted">
+        Checked just now at:
+      </Txt>
+      {quote.sources.map((s) => (
+        <Pressable
+          key={s.store + s.priceCents}
+          onPress={() => s.url && void WebBrowser.openBrowserAsync(s.url)}
+          disabled={!s.url}
+          style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 8, paddingHorizontal: space.md, borderRadius: radius.md, backgroundColor: colors.surfaceHigh }}>
+          <Row gap={6}>
+            <Icon name="storefront-outline" size={16} tone="muted" />
+            <Txt variant="label">{s.store}</Txt>
+            {s.url ? <Icon name="open-outline" size={14} tone="primary" /> : null}
+          </Row>
+          <Txt variant="label">{money(s.priceCents)}</Txt>
+        </Pressable>
+      ))}
+    </View>
+  );
+}
+
+/** Dollar input that keeps a cents value. */
+function PriceInput({ cents, onChange, invalid }: { cents: number; onChange: (cents: number) => void; invalid?: boolean }) {
+  const { colors } = useTheme();
+  const [text, setText] = useState((cents / 100).toFixed(2));
+  return (
+    <Row
+      gap={4}
+      style={{ height: 56, borderRadius: radius.md, backgroundColor: colors.surface, borderWidth: 1.5, borderColor: invalid ? colors.danger : colors.border, paddingHorizontal: space.lg }}>
+      <Txt style={{ fontFamily: fonts.display, fontSize: 22, color: colors.textMuted }}>$</Txt>
+      <TextInput
+        value={text}
+        onChangeText={(t) => {
+          const clean = t.replace(/[^0-9.]/g, '');
+          setText(clean);
+          const value = Math.round(parseFloat(clean) * 100);
+          if (Number.isFinite(value) && value > 0) onChange(value);
+        }}
+        onBlur={() => setText((cents / 100).toFixed(2))}
+        keyboardType="decimal-pad"
+        returnKeyType="done"
+        selectTextOnFocus
+        style={{ flex: 1, height: '100%', fontFamily: fonts.display, fontSize: 22, color: colors.text }}
+      />
+    </Row>
   );
 }
 

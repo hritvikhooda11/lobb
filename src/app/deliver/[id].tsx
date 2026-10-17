@@ -218,8 +218,10 @@ function Handoff({ job }: { job: Job }) {
   const [code, setCode] = useState<string | null>(null);
   const [scannerOpen, setScannerOpen] = useState(false);
   const [photo, setPhoto] = useState<Photo | null>(null);
+  const [idChecked, setIdChecked] = useState(false);
   const [busy, setBusy] = useState(false);
   const arrived = job.status === 'arrived';
+  const alcohol = useItem(job.itemId)?.category === 'alcohol';
   const f = job.fulfillment;
   const option = FULFILLMENT[f];
 
@@ -277,14 +279,28 @@ function Handoff({ job }: { job: Job }) {
       ) : null}
       <StepCard done={!!code} icon="qr-code-outline" label={`1. Scan ${job.buyerName}'s QR`} doneLabel={`Code ${code} ready`} onPress={() => setScannerOpen(true)} />
       <PhotoStep label="2. Quick photo of the handoff" hint="The item in their hands, or at the door" disabled={!code} photo={photo} onPhoto={setPhoto} />
+      {alcohol ? (
+        <StepCard
+          done={idChecked}
+          icon="id-card-outline"
+          label="3. Check their ID: 21 or older?"
+          doneLabel="ID checked: 21+"
+          onPress={() => setIdChecked(!idChecked)}
+        />
+      ) : null}
+      {alcohol ? (
+        <Txt variant="caption" tone="muted">
+          Look at a government photo ID. If they’re under 21, or it’s not their ID, don’t hand it over. Cancel and keep the item.
+        </Txt>
+      ) : null}
       <Button
         label={busy ? 'Confirming…' : 'Complete handoff'}
         kind="accent"
         icon="checkmark-circle"
-        disabled={!code || !photo?.base64 || busy}
+        disabled={!code || !photo?.base64 || busy || (alcohol && !idChecked)}
         onPress={async () => {
           setBusy(true);
-          const ok = await attempt(() => actions.confirmHandoff(job.id, code!, photo!.base64!));
+          const ok = await attempt(() => actions.confirmHandoff(job.id, code!, photo!.base64!, idChecked));
           setBusy(false);
           if (ok) tap('success');
           else setCode(null);
