@@ -52,6 +52,8 @@ Sign in with your `@uw.edu` email and enter the code from your inbox.
 ## 6. Push notifications
 Lets shout-outs and new orders reach phones even when Lobb is closed. Skip this while you're testing in Expo Go; the app shows local notifications there instead (only while it's open).
 
+**Shortcut:** `bash scripts/setup-push.sh` walks through a–c for you.
+
 **a. EAS project and a development build** (needs a paid Apple Developer account for iOS):
 ```bash
 npx eas login
