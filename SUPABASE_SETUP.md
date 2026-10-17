@@ -49,6 +49,42 @@ npx expo start
 ```
 Sign in with your `@uw.edu` email and enter the code from your inbox.
 
+## 6. Push notifications
+Lets shout-outs and new orders reach phones even when Lobb is closed. Skip this while you're testing in Expo Go; the app shows local notifications there instead (only while it's open).
+
+**a. EAS project and a development build** (needs a paid Apple Developer account for iOS):
+```bash
+npx eas login
+```
+```bash
+npx eas init
+```
+(This adds `extra.eas.projectId` to `app.json`. The app needs it to get a push token.)
+```bash
+npx eas build --profile development --platform ios
+```
+When EAS asks, answer **yes** to setting up push notifications and generating an APNs key. For Android, add FCM V1 credentials first (Expo docs: "Add Android FCM V1 credentials"). Install the build on your phone, run `npx expo start`, open Lobb and sign in: it asks for notification permission and saves the phone's push token in `push_tokens`.
+
+**b. Deploy the Edge Function.** Make a long random secret (`openssl rand -hex 32`) and keep it in your password manager:
+```bash
+npx supabase secrets set PUSH_WEBHOOK_SECRET=<your-secret>
+```
+```bash
+npx supabase functions deploy push --no-verify-jwt
+```
+(`--no-verify-jwt` because the database webhook calls it, not the app; it checks the secret header instead. If you turn on **Enhanced push security** in the EAS dashboard, also `npx supabase secrets set EXPO_ACCESS_TOKEN=<token>`.)
+
+**c. Add two database webhooks.** **Database → Webhooks → Create a new hook**, once for each table:
+
+| Name | Table | Events | Type | Function | HTTP header |
+|---|---|---|---|---|---|
+| `push_shoutouts` | `shoutouts` | Insert | Supabase Edge Functions | `push` (POST) | `x-lobb-webhook-secret: <your-secret>` |
+| `push_requests` | `requests` | Insert | Supabase Edge Functions | `push` (POST) | `x-lobb-webhook-secret: <your-secret>` |
+
+**d. Test it.** With the app fully closed on phone A, post a shout-out from phone B (same building). Phone A gets a banner; tapping it opens Shout-outs. Logs: **Edge Functions → push → Logs**. You can also send a test to a token from `push_tokens` at expo.dev/notifications.
+
+What gets sent: shout-outs go to everyone else in the building with shout-out alerts on; new orders go to neighbors who list the item and have it in stock (alcohol only to admins). Who and what is decided in SQL (`public.push_messages`) and covered by `npm run test:db`. Payloads contain first names, item names and prices, never room numbers or birthdates. Phones that uninstall Lobb are removed automatically.
+
 ## Testing with two people
 You need two accounts in the same building. Easiest: a friend with a UW email. Without one, you can temporarily allow a second domain in **SQL Editor**:
 

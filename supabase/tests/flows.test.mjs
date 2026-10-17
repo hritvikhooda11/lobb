@@ -286,6 +286,54 @@ await expectOk('dan cancels his own shout-out', ids.dan, `select public.cancel_s
 await expectFail('alex can’t cancel dan’s', ids.alex, `select public.cancel_shoutout($1)`, [so2.id], /can’t be cancelled/);
 await expectFail('users can’t write shout-outs directly', ids.alex, `insert into public.shoutouts (user_id, community_id, text, kind, category, offer) values (auth.uid(), 'standard', 'x y', 'buy', 'snacks', 100)`, [], /permission denied/);
 
+console.log('\nPush notifications');
+const tok = (n) => `ExponentPushToken[${n}]`;
+await expectOk('alex registers her phone', ids.alex, `select public.register_push_token($1, 'ios')`, [tok('alex')]);
+await expectOk('bri registers her phone', ids.bri, `select public.register_push_token($1, 'ios')`, [tok('bri')]);
+await expectOk('dan registers his phone', ids.dan, `insert into public.push_tokens (expo_push_token, user_id, platform) values ($1, auth.uid(), 'android')`, [tok('dan')]);
+await expectOk('cam registers (other building)', ids.cam, `select public.register_push_token($1, 'ios')`, [tok('cam')]);
+await expectFail('a junk token is rejected', ids.alex, `select public.register_push_token('not-a-token', 'ios')`, [], /check constraint/);
+await expectFail('cannot register a token for someone else', ids.alex, `insert into public.push_tokens (expo_push_token, user_id, platform) values ($1, $2, 'ios')`, [tok('evil'), ids.bri], /row-level security/);
+(await as(ids.alex, `select * from public.push_tokens`)).rows.length === 1 ? ok('alex sees only her own token') : bad('push tokens leaked');
+await as(ids.alex, `update public.push_tokens set user_id = auth.uid()`);
+await as(ids.alex, `delete from public.push_tokens`);
+one(await db.query(`select count(*)::int as n from public.push_tokens where user_id <> $1`, [ids.alex]))?.n === 3 ? ok('alex can’t touch other people’s tokens') : bad('alex changed someone else’s token');
+await expectOk('alex re-registers', ids.alex, `select public.register_push_token($1, 'ios')`, [tok('alex')]);
+await expectFail('users cannot read who to notify', ids.alex, `select * from public.push_messages('shoutouts', gen_random_uuid())`, [], /permission denied/);
+await expectFail('users cannot delete tokens via the server function', ids.alex, `select public.forget_push_tokens(array[$1])`, [tok('bri')], /permission denied/);
+
+const asServer = async (sql, params) => {
+  await db.exec('set role service_role;');
+  try {
+    return (await db.query(sql, params)).rows;
+  } finally {
+    await db.exec('reset role;');
+  }
+};
+await db.exec(`update public.requests set status = 'cancelled' where status in ('open', 'accepted', 'arriving', 'renting', 'returning')`);
+await db.exec(`update public.profiles set notify_shoutouts = false where id = '${ids.dan}'`);
+const pso = one(await as(ids.alex, `select * from public.create_shoutout('HDMI cable', 'rent', 'electronics', 250, 'dropoff')`));
+const soMsgs = await asServer(`select * from public.push_messages('shoutouts', $1)`, [pso.id]);
+const soTo = soMsgs.map((m) => m.token).sort();
+soTo.join() === tok('bri') ? ok('shout-out goes to bri only (not alex herself, not dan with alerts off, not cam in another building)') : bad(`shout-out recipients ${soTo}`);
+const m0 = soMsgs[0];
+m0?.title === '📣 HDMI cable?' && m0?.body === 'Alex will pay $2.50 to borrow one. Have it?' && m0?.url === '/shoutouts' ? ok(`shout-out text: “${m0.title} ${m0.body}”`) : bad(`shout-out message ${JSON.stringify(m0)}`);
+!JSON.stringify(soMsgs).includes('912') ? ok('no room number in the shout-out push') : bad('room number leaked into push');
+await as(ids.alex, `select public.cancel_shoutout($1)`, [pso.id]);
+(await asServer(`select * from public.push_messages('shoutouts', $1)`, [pso.id])).length === 0 ? ok('a cancelled shout-out sends nothing') : bad('cancelled shout-out still pushed');
+
+const preq = one(await as(ids.alex, `select * from public.create_request('coke-12', '', null, 'dropoff')`));
+const reqMsgs = await asServer(`select * from public.push_messages('requests', $1)`, [preq.id]);
+const reqTo = reqMsgs.map((m) => m.token).sort();
+reqTo.join() === [tok('bri'), tok('dan')].sort().join() ? ok('new order goes to the neighbors who list Coke (bri, dan)') : bad(`order recipients ${reqTo}`);
+/^Alex wants /.test(reqMsgs[0]?.title ?? '') ? ok(`order text: “${reqMsgs[0].title}”`) : bad(`order title ${reqMsgs[0]?.title}`);
+reqMsgs.every((m) => m.url === `/deliver/${preq.id}` && m.kind === 'order') ? ok('order push deep-links to /deliver/<id>') : bad('order url');
+!JSON.stringify(reqMsgs).includes('912') ? ok('no room number in the order push (drop-off)') : bad('room number leaked into order push');
+await expectOk('a phone signed in to a new account moves to it', ids.cam, `select public.register_push_token($1, 'ios')`, [tok('bri')]);
+!(await asServer(`select * from public.push_messages('requests', $1)`, [preq.id])).some((m) => m.token === tok('bri')) ? ok('bri no longer gets pushes on that phone') : bad('old account still pushed');
+await asServer(`select public.forget_push_tokens(array[$1])`, [tok('dan')]);
+one(await db.query(`select count(*)::int as n from public.push_tokens where expo_push_token = $1`, [tok('dan')]))?.n === 0 ? ok('server forgets uninstalled phones') : bad('dead token kept');
+
 console.log('\nRows to check');
 const hasPriceFns = one(await db.query(`select (select total from public.buy_price(11999)) as a, public.rent_per_day(1500) as b`));
 console.log('  buy_price(119.99).total =', hasPriceFns.a, '· rent_per_day($15) =', hasPriceFns.b);

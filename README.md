@@ -4,7 +4,7 @@
 
 Students request sealed everyday items (snacks, drinks, toiletries, chargers) or **borrow** non-food items. The request goes only to verified `@uw.edu` neighbors in the same building, and the first to accept delivers it. Handoff is confirmed by scanning the buyer's QR code.
 
-> Status: in active development. Phase 1 (real backend) is built; next up is push notifications, payments and TestFlight. See [ROADMAP.md](ROADMAP.md).
+> Status: in active development. Phase 1 (real backend) is built; remote push notifications are wired up; next up are payments and TestFlight. See [ROADMAP.md](ROADMAP.md).
 
 ## Features
 
@@ -14,6 +14,7 @@ Students request sealed everyday items (snacks, drinks, toiletries, chargers) or
 - **List an item by scanning its barcode.** Name, photo and category fill in automatically from the Open Food Facts databases, and duplicates are caught by barcode.
 - **AI pricing.** Claude searches current retail prices and checks each item against the marketplace rules (no alcohol, meds or opened food). Sellers can adjust ±5%.
 - **Trust and safety:** seal verification (barcode match + photo), a handoff photo, UW-only sign-in and ratings.
+- **Push notifications** for new shout-outs (everyone in the building with alerts on) and new orders (neighbors who list the item), even when the app is closed. A Supabase Edge Function picks recipients in SQL and batches them to Expo's push API; payloads never include room numbers.
 - Dark-first design system: violet for actions, lime for money, coral for urgency.
 
 ## Tech stack
@@ -21,7 +22,7 @@ Students request sealed everyday items (snacks, drinks, toiletries, chargers) or
 | Layer | Tech |
 |---|---|
 | App | React Native · Expo SDK 57 · Expo Router · TypeScript (strict) · React Compiler |
-| Backend | Supabase: Postgres, Auth (email OTP), Realtime, Storage, pg_cron |
+| Backend | Supabase: Postgres, Auth (email OTP), Realtime, Storage, pg_cron, Edge Functions (push) |
 | Server routes | Expo Router API routes (`/api/price`, `/api/barcode`) |
 | AI | Claude (Anthropic API) with web search + structured outputs |
 | Device | expo-camera (barcode/QR scanning), expo-image-picker, haptics |
@@ -48,6 +49,7 @@ src/store/             app state, Supabase reads/writes, realtime
 src/components/        UI kit, live status components, barcode/QR scanner
 src/data/              catalog photos, pricing rules (mirrored in SQL)
 supabase/migrations/   schema, RLS policies, database functions
+supabase/functions/    Edge Functions (push notifications)
 supabase/tests/        PGlite flow + security tests
 ```
 
@@ -59,6 +61,14 @@ cp .env.example .env      # then fill in; see SUPABASE_SETUP.md
 npx expo start            # i = iOS Simulator, w = web
 npm run test:db           # database rule tests (no Supabase needed)
 ```
+
+**Push notifications need a development build** (or TestFlight) on a real phone. Expo Go and the Simulator can't receive remote push, so there the app falls back to local notifications, which only fire while Lobb is open or was just backgrounded:
+
+```bash
+npx eas build --profile development --platform ios
+```
+
+Then `npx expo start` and open the dev build. Server setup (Edge Function + webhooks) is in [SUPABASE_SETUP.md](SUPABASE_SETUP.md#6-push-notifications).
 
 ---
 

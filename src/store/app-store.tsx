@@ -11,6 +11,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 
 import { bundledItem, type CategoryId, type Item, type ItemKind } from '@/data/catalog';
 import { sellerEarnings, type Fulfillment, type PriceBreakdown } from '@/data/pricing';
+import { unregisterRemotePush } from '@/lib/notify';
 import { friendlyError, publicPhotoUrl, supabase, uploadPhoto } from '@/lib/supabase';
 
 export const DELIVERY_WINDOW_MS = 10 * 60 * 1000;
@@ -536,7 +537,10 @@ function useAppState() {
         await loadProfile(uid());
         await refreshAll();
       },
-      signOut: () => supabase.auth.signOut(),
+      signOut: async () => {
+        await unregisterRemotePush().catch(() => {});
+        await supabase.auth.signOut();
+      },
       /** Demo only: clears this account's requests, deliveries and listings (/api/dev-reset). */
       resetDemo: async () => {
         const { data } = await supabase.auth.getSession();
