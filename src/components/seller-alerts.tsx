@@ -3,8 +3,8 @@
  *  1. a full-screen takeover for requests that match what you listed (first to accept wins),
  *  2. a banner that drops from the top of every screen while requests are waiting,
  *  3. a pulsing "!" dot (used on the Sell button and the Home tab).
- * These work while the app is open. Alerts when the app is closed need real push notifications,
- * which come with the TestFlight build (Expo Go can't receive them).
+ * These work while the app is open. When it's closed, the `push` Edge Function sends a remote push
+ * (dev build / TestFlight); while it's open that push is silenced so it doesn't double the takeover.
  */
 import { LinearGradient } from 'expo-linear-gradient';
 import { router, usePathname } from 'expo-router';

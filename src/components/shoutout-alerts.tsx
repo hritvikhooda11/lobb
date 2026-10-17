@@ -3,6 +3,8 @@
  * a normal phone notification: a banner from the top that goes to Notification Center.
  *  - A neighbor shouts for something → everyone in the building with shout-out alerts on is pinged.
  *  - Someone says "I have one" to your shout-out → you're pinged.
+ * New shout-outs come as remote push on dev/TestFlight builds (even with Lobb closed); the local
+ * copy here is the fallback for Expo Go. See src/lib/notify.ts.
  * On web (no system notifications) the same message shows as a small toast for a few seconds.
  */
 import { router } from 'expo-router';
@@ -12,11 +14,11 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Icon, Txt } from '@/components/ui';
 import { money } from '@/data/pricing';
-import { ensureNotificationPermission, notify, onNotificationTap, systemNotificationsSupported } from '@/lib/notify';
+import { notify, onNotificationTap, registerForRemotePush, systemNotificationsSupported, type PushKind } from '@/lib/notify';
 import { useStore, type Shoutout } from '@/store/app-store';
 import { radius, space, useTheme } from '@/theme';
 
-type Toast = { title: string; body: string; url: string };
+type Toast = { title: string; body: string; url: string; pushedAs?: PushKind };
 
 const pitch = (s: Shoutout) =>
   s.kind === 'rent' ? `${s.posterName} will pay ${money(s.offer)} to borrow one. Have it?` : `${s.posterName} will pay ${money(s.offer)}. Have one?`;
@@ -31,7 +33,7 @@ export function ShoutoutAlerts() {
 
   function show(t: Toast) {
     if (systemNotificationsSupported) {
-      void notify(t.title, t.body, t.url);
+      void notify(t.title, t.body, t.url, t.pushedAs);
       return;
     }
     setToast(t);
@@ -43,14 +45,14 @@ export function ShoutoutAlerts() {
     ]).start(({ finished }) => finished && setToast(null));
   }
 
-  // Ask for permission once you're signed in, and open the right screen when a notification is tapped.
-  useEffect(() => {
-    void ensureNotificationPermission();
-    return onNotificationTap((url) => router.push(url as never));
-  }, []);
+  // Open the right screen when a notification is tapped (also when it launched the app).
+  useEffect(() => onNotificationTap((url) => router.push(url as never)), []);
 
+  // For each signed-in user: ask for permission and register this phone for remote push
+  // (dev build / TestFlight). In Expo Go this falls back to local notifications.
   useEffect(() => {
     seen.current = null;
+    if (state.userId) void registerForRemotePush();
   }, [state.userId]);
 
   useEffect(() => {
@@ -65,7 +67,7 @@ export function ShoutoutAlerts() {
       const before = previous.get(s.id);
       previous.set(s.id, s.status);
       if (!s.mine && before === undefined && s.status === 'open' && state.profile?.notifyShoutouts) {
-        show({ title: `📣 ${s.text}?`, body: pitch(s), url: '/shoutouts' });
+        show({ title: `📣 ${s.text}?`, body: pitch(s), url: '/shoutouts', pushedAs: 'shoutout' });
       }
       if (s.mine && before === 'open' && s.status === 'claimed') {
         show({ title: `🎉 A neighbor has your ${s.text}`, body: 'They’re on it. Tap to track it.', url: s.requestId ? `/request/${s.requestId}` : '/shoutouts' });

@@ -33,7 +33,7 @@ These override PRODUCT_CONTEXT.md where they conflict.
 - [x] Real barcode check + seal/handoff photos uploaded to Storage
 - [ ] Create the Supabase project and push the schema (you)
 - [ ] Two-account live test
-- [ ] Push notifications for new requests (Expo Notifications + database webhook)
+- [x] Push notifications for new requests and shout-outs (Expo Notifications + database webhook → Edge Function)
 
 ## AI pricing setup
 - Put your key in `.env` (copy `.env.example`): `ANTHROPIC_API_KEY=...` from console.anthropic.com. Without it the app uses category estimates (marked ESTIMATE).

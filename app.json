@@ -48,6 +48,13 @@
           "recordAudioAndroid": false,
           "barcodeScannerEnabled": true
         }
+      ],
+      [
+        "expo-notifications",
+        {
+          "color": "#6D3CF0",
+          "defaultChannel": "default"
+        }
       ]
     ],
     "experiments": {
