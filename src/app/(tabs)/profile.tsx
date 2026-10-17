@@ -1,5 +1,5 @@
 import { router } from 'expo-router';
-import { View } from 'react-native';
+import { Switch, View } from 'react-native';
 
 import { Button, Card, Divider, Icon, Pill, Row, Screen, SectionHeader, Txt } from '@/components/ui';
 import { attempt, confirm } from '@/lib/alert';
@@ -29,6 +29,7 @@ export default function Profile() {
           <Pill icon="checkmark-circle" label="UW verified" tone="success" />
           <Pill icon="location" label={community?.name ?? ''} tone="primary" />
         </Row>
+        {user.isAdmin ? <Pill icon="shield-checkmark" label="Lobb admin · verified seller" tone="accent" /> : null}
       </View>
 
       <Row style={{ marginTop: space.xl }} gap={space.md}>
@@ -47,7 +48,22 @@ export default function Profile() {
         <Divider />
         <SettingRow label="Payout account" value="Connect bank" />
         <Divider />
-        <SettingRow label="Notifications" value="On" />
+        <SettingRow label="Age" value={user.age !== null ? (user.age >= 21 ? '21+ confirmed' : 'Under 21') : 'Not confirmed'} />
+        <Divider />
+        <Row style={{ justifyContent: 'space-between' }}>
+          <View style={{ flex: 1 }}>
+            <Txt>Shout-out alerts</Txt>
+            <Txt variant="caption" tone="muted">
+              Get a notification when a neighbor needs something
+            </Txt>
+          </View>
+          <Switch
+            value={user.notifyShoutouts}
+            onValueChange={(on) => void attempt(() => actions.setNotifyShoutouts(on))}
+            trackColor={{ true: colors.accent, false: colors.surfaceHigh }}
+            thumbColor="#fff"
+          />
+        </Row>
       </Card>
 
       <SectionHeader title="Help" />
@@ -58,7 +74,7 @@ export default function Profile() {
         </Row>
       </Card>
       <Txt variant="caption" tone="muted" style={{ marginTop: space.md }}>
-        Lobb only sells factory-sealed, shelf-stable items and rents non-food items. No alcohol, tobacco, vapes, or medication.
+        Lobb only sells factory-sealed, shelf-stable items and rents non-food items. Alcohol is 21+ only, sold by Lobb-verified sellers who check ID at the door. No tobacco, vapes, or medication.
       </Txt>
 
       {DEMO_TOOLS ? (

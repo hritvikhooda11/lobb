@@ -8,7 +8,7 @@ import { Button, Card, Icon, IconButton, ItemBadge, Pill, Row, Screen, SectionHe
 import { canRent, categories, communities, type CategoryId, type ItemKind } from '@/data/catalog';
 import { FULFILLMENT, money, priceFor, rentPerDay, sellerEarnings } from '@/data/pricing';
 import { attempt } from '@/lib/alert';
-import { LIVE_STATUSES, useItem, useStore } from '@/store/app-store';
+import { LIVE_STATUSES, useItem, useNow, useStore } from '@/store/app-store';
 import { fonts, radius, space, useTheme } from '@/theme';
 
 type Mode = 'buy' | 'rent' | 'sell';
@@ -78,11 +78,16 @@ function Browse({ kind }: { kind: ItemKind }) {
   const [query, setQuery] = useState('');
   const [cat, setCat] = useState<CategoryId | null>(null);
   const live = state.requests.find((r) => LIVE_STATUSES.includes(r.status));
-  const cats = categories.filter((c) => (kind === 'rent' ? canRent(c.id) : true));
   const community = communities.find((c) => c.id === state.profile?.communityId);
+  // The 21+ section only exists in buildings where Lobb has turned it on.
+  const alcoholOn = !!state.profile?.alcoholEnabled;
+  const cats = categories.filter((c) => (kind === 'rent' ? canRent(c.id) : !c.ageRestricted || alcoholOn));
 
   // Only items a neighbor can actually bring you right now. Sold out (or lent out) items leave the store.
-  const all = useMemo(() => state.items.filter((i) => i.kind === kind && i.nearbyCount > 0), [state.items, kind]);
+  const all = useMemo(
+    () => state.items.filter((i) => i.kind === kind && i.nearbyCount > 0 && !i.special && (i.category !== 'alcohol' || alcoholOn)),
+    [state.items, kind, alcoholOn],
+  );
   const filtering = !!query.trim() || !!cat;
   const results = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -135,6 +140,7 @@ function Browse({ kind }: { kind: ItemKind }) {
       ) : null}
 
       {all.length > 0 && !filtering ? <PromoCarousel kind={kind} onPick={(c) => setCat(c ?? null)} /> : null}
+      {!filtering ? <ShoutoutCard /> : null}
       {all.length > 0 ? <CategoryCircles kind={kind} cats={cats} active={cat} onPick={setCat} /> : null}
 
       {all.length === 0 ? null : filtering ? (
@@ -151,9 +157,16 @@ function Browse({ kind }: { kind: ItemKind }) {
           {results.length ? (
             <ItemGrid items={results} />
           ) : (
-            <Txt tone="muted" style={{ marginTop: space.md }}>
-              Nothing matches yet. {kind === 'buy' ? 'Only sealed, shelf-stable items are on Lobb.' : 'Neighbors add new rentals all the time.'}
-            </Txt>
+            <View style={{ gap: space.md, marginTop: space.md }}>
+              <Txt tone="muted">Nobody nearby has listed that yet.</Txt>
+              {query.trim() ? (
+                <Button
+                  label={`Shout for “${query.trim()}”`}
+                  icon="megaphone"
+                  onPress={() => router.push({ pathname: '/shoutout-new', params: { text: query.trim() } })}
+                />
+              ) : null}
+            </View>
           )}
         </>
       ) : kind === 'buy' ? (
@@ -174,6 +187,30 @@ function Browse({ kind }: { kind: ItemKind }) {
 }
 
 const bundledCatalogId = (id: string) => !id.startsWith('user-');
+
+/** "Can't find it? Shout it out", plus how many neighbors are asking right now. */
+function ShoutoutCard() {
+  const { colors } = useTheme();
+  const { state } = useStore();
+  const now = useNow();
+  const asking = state.shoutouts.filter((s) => !s.mine && s.status === 'open' && s.expiresAt > now).length;
+  return (
+    <Card onPress={() => router.push(asking ? '/shoutouts' : '/shoutout-new')} style={{ marginTop: space.lg }}>
+      <Row>
+        <View style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: colors.primarySoft, alignItems: 'center', justifyContent: 'center' }}>
+          <Icon name="megaphone" size={22} tone="primary" />
+        </View>
+        <View style={{ flex: 1 }}>
+          <Txt variant="label">Can’t find it? Shout it out</Txt>
+          <Txt variant="caption" tone="muted">
+            {asking ? `${asking} ${asking === 1 ? 'neighbor is' : 'neighbors are'} asking for something right now` : 'Ask your building for anything that isn’t listed'}
+          </Txt>
+        </View>
+        <Icon name="chevron-forward" size={20} tone="muted" />
+      </Row>
+    </Card>
+  );
+}
 
 function LiveBanner({ requestId }: { requestId: string }) {
   const { colors } = useTheme();
@@ -245,6 +282,8 @@ function SellMode() {
         </Card>
       ) : null}
 
+      <ShoutoutsForSellers />
+
       <SectionHeader title="Incoming requests" />
       <View style={{ gap: space.md }}>
         {incoming.length === 0 ? <Txt tone="muted">All quiet. We'll ping you when a neighbor needs something.</Txt> : null}
@@ -260,6 +299,29 @@ function SellMode() {
         ))}
       </View>
     </View>
+  );
+}
+
+function ShoutoutsForSellers() {
+  const { state } = useStore();
+  const now = useNow();
+  const open = state.shoutouts.filter((s) => !s.mine && s.status === 'open' && s.expiresAt > now);
+  if (open.length === 0) return null;
+  return (
+    <Card highlight onPress={() => router.push('/shoutouts')} style={{ marginTop: space.md }}>
+      <Row>
+        <Icon name="megaphone" size={24} tone="primary" />
+        <View style={{ flex: 1 }}>
+          <Txt variant="label">
+            {open.length} {open.length === 1 ? 'shout-out' : 'shout-outs'} near you
+          </Txt>
+          <Txt variant="caption" tone="muted" numberOfLines={1}>
+            {open.map((s) => s.text).join(' · ')}
+          </Txt>
+        </View>
+        <Icon name="chevron-forward" size={20} tone="primary" />
+      </Row>
+    </Card>
   );
 }
 

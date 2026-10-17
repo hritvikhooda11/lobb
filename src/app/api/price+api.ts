@@ -1,9 +1,10 @@
 /**
  * POST /api/price — prices an item a seller wants to list.
  *
- * Claude searches the web for the current US retail price, looks at the seller's photo,
- * and checks the item against Lobb's rules (sealed / shelf-stable food only, nothing
- * age-restricted). Runs server-side so ANTHROPIC_API_KEY never ships in the app.
+ * Claude searches the web for the current US retail price at a few real stores, looks at the
+ * seller's photo, and checks the item against Lobb's rules. The app shows every store it found
+ * (with links) so sellers and buyers can see where the Lobb price comes from. Alcohol is only
+ * priced for Lobb admins. Runs server-side so ANTHROPIC_API_KEY never ships in the app.
  * Without a key, returns an offline category estimate so the app still works in dev.
  */
 import Anthropic from '@anthropic-ai/sdk';
@@ -16,11 +17,17 @@ import { supabaseAdmin, userIdFromRequest } from '@/lib/supabase-admin';
 
 export type PriceRequest = { name: string; category: CategoryId; kind: ItemKind; barcode?: string; imageBase64?: string; imageUrl?: string };
 
+export type PriceSource = { store: string; url?: string; priceCents: number };
+
 export type PriceResponse = {
   name: string;
   size: string;
   retailPriceCents: number;
+  /** The store the Lobb price is based on, and its link. */
   source: string;
+  sourceUrl?: string;
+  /** Every store price found (cheapest first). */
+  sources: PriceSource[];
   eligible: boolean;
   reason: string;
   estimated: boolean;
@@ -31,8 +38,16 @@ export type PriceResponse = {
 const PriceResult = z.object({
   name: z.string().describe('Clean product name, e.g. "Coca-Cola"'),
   size: z.string().describe('Short size/variant, e.g. "12 oz can" or "3 ft"'),
-  retail_price_usd: z.number().describe('Typical current US retail price for ONE unit, in dollars'),
-  source: z.string().describe('Where the price came from, e.g. "Target.com"'),
+  retail_price_usd: z.number().describe('Typical current US retail price for ONE unit, in dollars (the median of the stores you found)'),
+  sources: z
+    .array(
+      z.object({
+        store: z.string().describe('Store name, e.g. "Target"'),
+        url: z.string().describe('Product page URL you found the price on'),
+        price_usd: z.number().describe('Price for ONE unit at that store, in dollars'),
+      }),
+    )
+    .describe('Up to 3 real US stores where you saw this exact product and its price. Empty if you found none.'),
   eligible: z.boolean().describe('Whether this item is allowed on Lobb'),
   reason: z.string().describe('One short sentence explaining eligibility or the price'),
 });
@@ -40,7 +55,8 @@ const PriceResult = z.object({
 const RULES = `Lobb is a marketplace where college students sell or lend everyday items to neighbors in their building.
 Allowed to SELL: factory-sealed, shelf-stable, non-refrigerated packaged goods (snacks, drinks, instant food), sealed toiletries, sealed chargers/batteries/household goods.
 Allowed to RENT (lend and get back): non-edible items like calculators, cables, umbrellas, irons, power strips. Never toiletries or food.
-NEVER allowed: alcohol, tobacco, vapes, cannabis, medications or supplements, weapons, anything age-restricted, homemade or opened food, anything needing refrigeration.`;
+ALCOHOL: only allowed when the category is "Alcohol 21+": sealed, factory-packaged single cans/bottles of beer, hard seltzer, wine or spirits. Never anywhere else.
+NEVER allowed: tobacco, vapes, cannabis, medications or supplements, weapons, homemade or opened food, anything needing refrigeration.`;
 
 const client = new Anthropic();
 
@@ -57,6 +73,9 @@ export async function POST(request: Request): Promise<Response> {
     return Response.json({ error: 'name, category and kind are required' }, { status: 400 });
   }
 
+  if (category.ageRestricted && !(await isAdmin(request))) {
+    return Response.json({ ...offlineEstimate(name, category.id), eligible: false, reason: 'Only Lobb-verified sellers can sell alcohol.' } satisfies PriceResponse);
+  }
   if (!process.env.ANTHROPIC_API_KEY) return withQuote(request, body, offlineEstimate(name, category.id));
 
   const content: Anthropic.Beta.BetaContentBlockParam[] = [];
@@ -74,7 +93,7 @@ Category they picked: ${category.label}
 ${body.barcode ? `Barcode (UPC/EAN): ${body.barcode}` : 'No barcode.'}
 ${hasPhoto ? 'Their photo is attached — use it to identify the exact product and check it looks sealed (for selling).' : 'No photo.'}
 
-Search the web for the typical current US retail price of one unit, then decide if it's eligible.`,
+Search the web for this exact product's current US retail price for one unit at up to 3 stores (Target, Walmart, Amazon, CVS, Walgreens, Safeway, QFC...), then decide if it's eligible.`,
   });
 
   try {
@@ -102,11 +121,21 @@ Search the web for the typical current US retail price of one unit, then decide 
     const result = response.parsed_output;
     if (!result) return withQuote(request, body, offlineEstimate(name, category.id));
 
+    const sources: PriceSource[] = result.sources
+      .filter((s) => s.price_usd > 0 && /^https:\/\//.test(s.url))
+      .map((s) => ({ store: s.store, url: s.url, priceCents: Math.round(s.price_usd * 100) }))
+      .sort((a, b) => a.priceCents - b.priceCents)
+      .slice(0, 3);
+    const retail = Math.max(25, Math.round(result.retail_price_usd * 100));
+    // Cite the store closest to the price we use.
+    const cited = [...sources].sort((a, b) => Math.abs(a.priceCents - retail) - Math.abs(b.priceCents - retail))[0];
     return withQuote(request, body, {
       name: result.name,
       size: result.size,
-      retailPriceCents: Math.max(25, Math.round(result.retail_price_usd * 100)),
-      source: result.source,
+      retailPriceCents: retail,
+      source: cited?.store ?? 'Web search',
+      sourceUrl: cited?.url,
+      sources,
       eligible: result.eligible,
       reason: result.reason,
       estimated: false,
@@ -126,7 +155,17 @@ async function withQuote(request: Request, body: PriceRequest, quote: PriceRespo
   if (!supabaseAdmin || !userId) return Response.json(quote);
   const { data, error } = await supabaseAdmin
     .from('price_quotes')
-    .insert({ user_id: userId, kind: body.kind, name: quote.name, size: quote.size, category: body.category, market_price: quote.retailPriceCents, eligible: quote.eligible })
+    .insert({
+      user_id: userId,
+      kind: body.kind,
+      name: quote.name,
+      size: quote.size,
+      category: body.category,
+      market_price: quote.retailPriceCents,
+      eligible: quote.eligible,
+      price_source: quote.source,
+      price_source_url: quote.sourceUrl ?? null,
+    })
     .select('id')
     .single();
   if (error) console.error('[price] could not save quote', error.message);
@@ -138,9 +177,17 @@ function offlineEstimate(name: string, category: CategoryId): PriceResponse {
     name,
     size: '',
     retailPriceCents: fallbackRetailPrice[category],
-    source: 'Lobb estimate',
+    source: 'Lobb category estimate',
+    sources: [],
     eligible: true,
     reason: 'Live price lookup is offline, so this is a category estimate.',
     estimated: true,
   };
+}
+
+async function isAdmin(request: Request) {
+  const userId = await userIdFromRequest(request);
+  if (!supabaseAdmin || !userId) return false;
+  const { data } = await supabaseAdmin.from('profiles').select('role').eq('id', userId).maybeSingle();
+  return data?.role === 'admin';
 }

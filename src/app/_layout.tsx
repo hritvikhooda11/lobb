@@ -6,6 +6,7 @@ import { useEffect } from 'react';
 import { ActivityIndicator, View } from 'react-native';
 
 import { SellerAlerts } from '@/components/seller-alerts';
+import { ShoutoutAlerts } from '@/components/shoutout-alerts';
 import { SetupNeeded } from '@/components/setup-needed';
 import { supabaseConfigured } from '@/lib/supabase';
 import { AppStoreProvider, useStore } from '@/store/app-store';
@@ -27,20 +28,23 @@ function RootStack() {
   const signedIn = !!state.userId && !!state.profile?.communityId && !!state.profile?.room;
   return (
     <>
-    <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.bg } }}>
-      <Stack.Protected guard={!signedIn}>
-        <Stack.Screen name="onboarding" />
-      </Stack.Protected>
-      <Stack.Protected guard={signedIn}>
-        <Stack.Screen name="(tabs)" />
-        <Stack.Screen name="item/[id]" options={{ presentation: 'formSheet', sheetAllowedDetents: [0.72, 1], sheetGrabberVisible: true, sheetCornerRadius: 28 }} />
-        <Stack.Screen name="request/[id]" options={{ gestureEnabled: false }} />
-        <Stack.Screen name="deliver/[id]" options={{ gestureEnabled: false }} />
-        <Stack.Screen name="report" options={{ presentation: 'modal' }} />
-        <Stack.Screen name="list-item" options={{ presentation: 'modal' }} />
-      </Stack.Protected>
-    </Stack>
-    {signedIn ? <SellerAlerts /> : null}
+      <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.bg } }}>
+        <Stack.Protected guard={!signedIn}>
+          <Stack.Screen name="onboarding" />
+        </Stack.Protected>
+        <Stack.Protected guard={signedIn}>
+          <Stack.Screen name="(tabs)" />
+          <Stack.Screen name="item/[id]" options={{ presentation: 'formSheet', sheetAllowedDetents: [0.72, 1], sheetGrabberVisible: true, sheetCornerRadius: 28 }} />
+          <Stack.Screen name="request/[id]" options={{ gestureEnabled: false }} />
+          <Stack.Screen name="deliver/[id]" options={{ gestureEnabled: false }} />
+          <Stack.Screen name="report" options={{ presentation: 'modal' }} />
+          <Stack.Screen name="list-item" options={{ presentation: 'modal' }} />
+          <Stack.Screen name="shoutouts" options={{ presentation: 'modal' }} />
+          <Stack.Screen name="shoutout-new" options={{ presentation: 'modal' }} />
+        </Stack.Protected>
+      </Stack>
+      {signedIn ? <SellerAlerts /> : null}
+      {signedIn ? <ShoutoutAlerts /> : null}
     </>
   );
 }
