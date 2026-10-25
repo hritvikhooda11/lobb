@@ -21,7 +21,7 @@ Students request sealed everyday items (snacks, drinks, toiletries, chargers) or
 
 | Layer | Tech |
 |---|---|
-| App | React Native · Expo SDK 57 · Expo Router · TypeScript (strict) · React Compiler |
+| App | React Native · Expo SDK 58 (React Native 0.88) · Expo Router · TypeScript (strict) · React Compiler |
 | Backend | Supabase: Postgres, Auth (email OTP), Realtime, Storage, pg_cron, Edge Functions (push) |
 | Server routes | Expo Router API routes (`/api/price`, `/api/barcode`) |
 | AI | Claude (Anthropic API) with web search + structured outputs |

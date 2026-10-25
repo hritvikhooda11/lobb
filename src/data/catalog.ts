@@ -10,7 +10,7 @@
  *
  * Photos live in assets/items (credits in assets/items/CREDITS.md).
  */
-import type { ImageSourcePropType } from 'react-native';
+import type { ImageSource } from 'expo-image';
 
 import type { categoryTint } from '@/theme';
 
@@ -45,7 +45,8 @@ export type Item = {
   size: string;
   category: CategoryId;
   emoji: string;
-  image?: ImageSourcePropType;
+  /** A bundled require() or a { uri } photo. */
+  image?: ImageSource | number;
   /** Retail market price in cents (looked up from retail sources in production). */
   marketPrice: number;
   /** How many neighbors in your community have this listed right now (mock). */
