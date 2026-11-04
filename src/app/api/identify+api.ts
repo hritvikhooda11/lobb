@@ -50,8 +50,9 @@ export async function POST(request: Request): Promise<Response> {
 
   try {
     const response = await client.beta.messages.parse({
-      model: 'claude-opus-5-5',
-      max_tokens: 2000,
+      // Cheapest model at low effort: reading a label doesn't need more.
+      model: 'claude-haiku-5-5',
+      max_tokens: 1000,
       betas: ['server-side-fallback-2026-07-01'],
       fallbacks: 'default',
       output_config: { effort: 'low', format: betaZodOutputFormat(Result) },
@@ -74,7 +75,8 @@ export async function POST(request: Request): Promise<Response> {
     const label = [r.brand, r.name].filter(Boolean).join(' ').trim();
     const digits = r.barcode_digits.replace(/\D/g, '');
     // Prefer the barcode if the AI could read it; otherwise search by what's printed on the front.
-    const match = (digits.length >= 8 ? await upcLookup(digits) : null) ?? (await upcSearch([label, r.size].filter(Boolean).join(' ')));
+    // Search by brand + name first (size text like "21 oz (1 lb 5 oz) 595g" throws matching off).
+    const match = (digits.length >= 8 ? await upcLookup(digits) : null) ?? (await upcSearch(label));
     return Response.json({
       identified: true,
       name: label,

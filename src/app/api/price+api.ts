@@ -63,7 +63,7 @@ const PriceResult = z.object({
 });
 
 const RULES = `Lobb is a marketplace where college students sell or lend everyday items to neighbors in their building.
-Allowed to SELL: factory-sealed, shelf-stable, non-refrigerated packaged goods (snacks, drinks, instant food), sealed toiletries, sealed chargers/batteries/household goods.
+Allowed to SELL: factory-sealed, shelf-stable, non-refrigerated packaged goods (snacks, drinks, instant food), sealed toiletries, and sealed new chargers, cables, batteries and household goods.
 Allowed to RENT (lend and get back): non-edible items like calculators, cables, umbrellas, irons, power strips. Never toiletries or food.
 ALCOHOL: only allowed when the category is "Alcohol 21+": sealed, factory-packaged single cans/bottles of beer, hard seltzer, wine or spirits. Never anywhere else.
 NEVER allowed: tobacco, vapes, cannabis, medications, vitamins or supplements, weapons, homemade or opened food, anything needing refrigeration.`;
@@ -147,8 +147,9 @@ Search the web for this exact product's current US retail price at up to 3 store
 
   try {
     const params = {
-      model: 'claude-opus-5-5',
-      max_tokens: 16000,
+      // Cheapest model, low effort, 3 searches max: this only runs when no store lists the item.
+      model: 'claude-haiku-5-5',
+      max_tokens: 4000,
       betas: ['server-side-fallback-2026-07-01'],
       fallbacks: 'default' as const,
       output_config: { effort: 'low' as const, format: betaZodOutputFormat(PriceResult) },
@@ -175,6 +176,11 @@ Search the web for this exact product's current US retail price at up to 3 store
       .map((s) => ({ store: s.store, url: s.url, priceCents: Math.round(s.price_usd * 100) }))
       .sort((a, b) => a.priceCents - b.priceCents)
       .slice(0, 3);
+    // Eligibility comes from Lobb's written rules, not the model, so it's the same every time.
+    const aiBanned = bannedReason([result.name], { allowAlcohol: !!category.ageRestricted });
+    if (aiBanned) return withQuote(request, body, { ...offlineEstimate(name, category.id), eligible: false, reason: aiBanned });
+    // A price with no store link behind it isn't trustworthy: fall back to the labeled estimate.
+    if (!sources.length) return withQuote(request, body, { ...offlineEstimate(name, category.id), name: result.name || name, size: result.size });
     const retail = Math.max(25, Math.round(result.retail_price_usd * 100));
     // Cite the store closest to the price we use.
     const cited = [...sources].sort((a, b) => Math.abs(a.priceCents - retail) - Math.abs(b.priceCents - retail))[0];
@@ -182,13 +188,13 @@ Search the web for this exact product's current US retail price at up to 3 store
       name: result.name,
       size: result.size,
       retailPriceCents: retail,
-      source: cited?.store ?? 'Web search',
-      sourceUrl: cited?.url,
+      source: cited.store,
+      sourceUrl: cited.url,
       sources,
-      eligible: result.eligible && !bannedReason([result.name], { allowAlcohol: !!category.ageRestricted }),
-      reason: bannedReason([result.name], { allowAlcohol: !!category.ageRestricted }) ?? result.reason,
+      eligible: true,
+      reason: `Found online at ${sources.map((x) => x.store).join(', ')}.`,
       estimated: false,
-      confidence: sources.length ? 'medium' : 'low',
+      confidence: 'medium',
     });
   } catch (error) {
     if (error instanceof Anthropic.AuthenticationError) console.error('[price] Invalid ANTHROPIC_API_KEY');
