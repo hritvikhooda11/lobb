@@ -1,11 +1,15 @@
 /**
  * POST /api/price — prices an item a seller wants to list.
  *
- * Claude searches the web for the current US retail price at a few real stores, looks at the
- * seller's photo, and checks the item against Lobb's rules. The app shows every store it found
- * (with links) so sellers and buyers can see where the Lobb price comes from. Alcohol is only
- * priced for Lobb admins. Runs server-side so ANTHROPIC_API_KEY never ships in the app.
- * Without a key, returns an offline category estimate so the app still works in dev.
+ * In order:
+ *  1. Lobb's rules (src/data/rules.ts) rule out banned items in code, before anything else.
+ *  2. Real store prices: by barcode (or an exact name match) from UPCitemdb and, when configured,
+ *     today's shelf price at the nearest QFC (Kroger API). Combined by consensus() so a stray
+ *     listing (wrong pack size, reseller) can't skew the price.
+ *  3. Only if no store has it: Claude searches the web (needs ANTHROPIC_API_KEY).
+ *  4. Last resort: a category estimate, clearly labeled, that the seller must check.
+ * The app shows every store price with a link and a confidence level. Server-side so no keys ship
+ * in the app. Alcohol is only priced for Lobb admins.
  */
 import Anthropic from '@anthropic-ai/sdk';
 import { betaZodOutputFormat } from '@anthropic-ai/sdk/helpers/beta/zod';
@@ -13,11 +17,13 @@ import { z } from 'zod';
 
 import { categories, type CategoryId, type ItemKind } from '@/data/catalog';
 import { fallbackRetailPrice } from '@/data/pricing';
+import { bannedReason } from '@/data/rules';
+import { consensus, krogerOffer, upcLookup, upcSearch, type Offer } from '@/lib/server/products';
 import { supabaseAdmin, userIdFromRequest } from '@/lib/supabase-admin';
 
 export type PriceRequest = { name: string; category: CategoryId; kind: ItemKind; barcode?: string; imageBase64?: string; imageUrl?: string };
 
-export type PriceSource = { store: string; url?: string; priceCents: number };
+export type PriceSource = { store: string; url?: string; priceCents: number; title?: string };
 
 export type PriceResponse = {
   name: string;
@@ -31,6 +37,10 @@ export type PriceResponse = {
   eligible: boolean;
   reason: string;
   estimated: boolean;
+  /** high = today's local shelf price or 3+ stores agree; medium = 1–2 stores or web search; low = estimate. */
+  confidence: 'high' | 'medium' | 'low';
+  /** The exact product the stores list, so the seller can catch a wrong match or pack size. */
+  matchedTitle?: string;
   /** Server-issued quote id; the database only creates items from a quote. */
   quoteId?: string;
 };
@@ -56,7 +66,10 @@ const RULES = `Lobb is a marketplace where college students sell or lend everyda
 Allowed to SELL: factory-sealed, shelf-stable, non-refrigerated packaged goods (snacks, drinks, instant food), sealed toiletries, sealed chargers/batteries/household goods.
 Allowed to RENT (lend and get back): non-edible items like calculators, cables, umbrellas, irons, power strips. Never toiletries or food.
 ALCOHOL: only allowed when the category is "Alcohol 21+": sealed, factory-packaged single cans/bottles of beer, hard seltzer, wine or spirits. Never anywhere else.
-NEVER allowed: tobacco, vapes, cannabis, medications or supplements, weapons, homemade or opened food, anything needing refrigeration.`;
+NEVER allowed: tobacco, vapes, cannabis, medications, vitamins or supplements, weapons, homemade or opened food, anything needing refrigeration.`;
+
+/** Price for ONE unit: if every store lists a multipack (e.g. "12 pack") of what the seller has, the AI path is safer. */
+const ONE_UNIT_HINT = 'Price ONE unit (one can, one bag, one box). If stores sell it in multipacks, divide to the single-unit price.';
 
 const client = new Anthropic();
 
@@ -76,6 +89,41 @@ export async function POST(request: Request): Promise<Response> {
   if (category.ageRestricted && !(await isAdmin(request))) {
     return Response.json({ ...offlineEstimate(name, category.id), eligible: false, reason: 'Only Lobb-verified sellers can sell alcohol.' } satisfies PriceResponse);
   }
+
+  // 1. Rules first, in code.
+  const barcode = body.barcode?.replace(/\D/g, '') || null;
+  const match = barcode ? await upcLookup(barcode) : await upcSearch(name);
+  const banned = bannedReason([name, match?.title], { allowAlcohol: !!category.ageRestricted });
+  if (banned) return withQuote(request, body, { ...offlineEstimate(name, category.id), eligible: false, reason: banned, confidence: 'low' });
+
+  // 2. Real store prices.
+  const local = await krogerOffer(barcode, name).catch(() => null);
+  const offers: Offer[] = [...(local ? [local] : []), ...(match?.offers ?? [])];
+  const found = consensus(offers);
+  if (found) {
+    const sources = found.used.map((o) => ({ store: o.store, url: o.url, priceCents: o.priceCents, title: o.title }));
+    const cited = found.used[0];
+    return withQuote(request, body, {
+      name,
+      size: '',
+      retailPriceCents: Math.max(25, found.priceCents),
+      source: cited.store,
+      sourceUrl: cited.url,
+      sources,
+      eligible: true,
+      reason:
+        found.confidence === 'high'
+          ? local
+            ? `Today’s shelf price at ${local.store}.`
+            : `${found.used.length} stores agree on this price.`
+          : 'Only a couple of stores list this product, so double-check it.',
+      estimated: false,
+      confidence: found.confidence,
+      matchedTitle: local?.title || match?.title,
+    });
+  }
+
+  // 3. Nobody lists it: web search.
   if (!process.env.ANTHROPIC_API_KEY) return withQuote(request, body, offlineEstimate(name, category.id));
 
   const content: Anthropic.Beta.BetaContentBlockParam[] = [];
@@ -90,10 +138,11 @@ export async function POST(request: Request): Promise<Response> {
     text: `A seller wants to ${body.kind === 'buy' ? 'sell' : 'rent out'} this item.
 Name they typed: "${name}"
 Category they picked: ${category.label}
-${body.barcode ? `Barcode (UPC/EAN): ${body.barcode}` : 'No barcode.'}
+${barcode ? `Barcode (UPC/EAN): ${barcode}` : 'No barcode.'}
+${match?.title ? `Product databases call it: "${match.title}"` : ''}
 ${hasPhoto ? 'Their photo is attached — use it to identify the exact product and check it looks sealed (for selling).' : 'No photo.'}
 
-Search the web for this exact product's current US retail price for one unit at up to 3 stores (Target, Walmart, Amazon, CVS, Walgreens, Safeway, QFC...), then decide if it's eligible.`,
+Search the web for this exact product's current US retail price at up to 3 stores (Target, Walmart, Amazon, CVS, Walgreens, Safeway, QFC...), then decide if it's eligible. ${ONE_UNIT_HINT}`,
   });
 
   try {
@@ -136,9 +185,10 @@ Search the web for this exact product's current US retail price for one unit at 
       source: cited?.store ?? 'Web search',
       sourceUrl: cited?.url,
       sources,
-      eligible: result.eligible,
-      reason: result.reason,
+      eligible: result.eligible && !bannedReason([result.name], { allowAlcohol: !!category.ageRestricted }),
+      reason: bannedReason([result.name], { allowAlcohol: !!category.ageRestricted }) ?? result.reason,
       estimated: false,
+      confidence: sources.length ? 'medium' : 'low',
     });
   } catch (error) {
     if (error instanceof Anthropic.AuthenticationError) console.error('[price] Invalid ANTHROPIC_API_KEY');
@@ -180,8 +230,9 @@ function offlineEstimate(name: string, category: CategoryId): PriceResponse {
     source: 'Lobb category estimate',
     sources: [],
     eligible: true,
-    reason: 'Live price lookup is offline, so this is a category estimate.',
+    reason: 'No store lists this product, so this is only a rough category estimate. Check a store and type the real price.',
     estimated: true,
+    confidence: 'low',
   };
 }
 

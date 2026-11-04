@@ -1,15 +1,17 @@
 import { Image } from 'expo-image';
 import { router } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState, type ComponentRef } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import type { BarcodeResponse } from '@/app/api/barcode+api';
+import type { IdentifyResponse } from '@/app/api/identify+api';
 import type { PriceResponse } from '@/app/api/price+api';
 import { BarcodeScanner } from '@/components/barcode-scanner';
 import { Button, Card, categoryIcon, Icon, ItemBadge, Pill, Row, Txt, tap } from '@/components/ui';
 import { canRent, categories, findByBarcode, findDuplicate, getCategory, type CategoryId, type Item, type ItemKind } from '@/data/catalog';
+import { bannedReason } from '@/data/rules';
 import { checkPrice, MAX_ADJUST_PCT, money, PRICE_MAX_PCT, PRICE_WARN_PCT, rentPerDay, sellerEarnings } from '@/data/pricing';
 import { attempt, confirm, showError } from '@/lib/alert';
 import { takePhoto, type Photo } from '@/lib/photo';
@@ -34,6 +36,11 @@ export default function ListItem() {
   const [scannerOpen, setScannerOpen] = useState(false);
   const [lookingUp, setLookingUp] = useState(false);
   const [scan, setScan] = useState<BarcodeResponse | null>(null);
+  const [identifying, setIdentifying] = useState(false);
+  /** What the AI thinks the photo shows, waiting for the seller to confirm. */
+  const [candidate, setCandidate] = useState<(Extract<IdentifyResponse, { identified: true }> & { photo: Photo }) | null>(null);
+  const nameInput = useRef<ComponentRef<typeof TextInput>>(null);
+  const warning = category === 'alcohol' ? null : bannedReason([name]);
 
   const duplicate = useMemo(
     () => (scan && findByBarcode(state.items, scan.barcode, kind)) || (name.trim().length >= 3 ? findDuplicate(state.items, name, kind) : undefined),
@@ -73,6 +80,65 @@ export default function ListItem() {
       setLookingUp(false);
       setScannerOpen(false);
     }
+  }
+
+  /** Barcode won't scan: snap the item and let the AI say what it is, then the seller confirms. */
+  async function identifyFromPhoto() {
+    if (scannerOpen) {
+      setScannerOpen(false);
+      // Let the scanner finish closing before the camera opens (iOS won't stack them).
+      await new Promise((r) => setTimeout(r, 600));
+    }
+    const p = await takePhoto({ base64: true });
+    if (!p?.base64) return;
+    setIdentifying(true);
+    try {
+      const { data } = await supabase.auth.getSession();
+      const res = await fetch('/api/identify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${data.session?.access_token ?? ''}` },
+        body: JSON.stringify({ imageBase64: p.base64 }),
+      });
+      const body = (await res.json().catch(() => ({}))) as IdentifyResponse & { error?: string };
+      if (!res.ok || !body.identified) {
+        setPhoto(p);
+        resetQuote();
+        showError(body.error ?? (body.identified === false ? body.reason : 'Couldn’t identify it.'), 'Type it in instead');
+        nameInput.current?.focus();
+        return;
+      }
+      setCandidate({ ...body, photo: p });
+    } catch {
+      setPhoto(p);
+      showError('Couldn’t reach Lobb to identify the photo. Type the name instead.');
+    } finally {
+      setIdentifying(false);
+    }
+  }
+
+  function acceptCandidate() {
+    if (!candidate) return;
+    tap('success');
+    setName([candidate.name, candidate.size].filter(Boolean).join(', '));
+    setPhoto(candidate.photo);
+    if (candidate.category && (kind === 'buy' || canRent(candidate.category))) setCategory(candidate.category);
+    setScan(
+      candidate.barcode
+        ? { found: true, barcode: candidate.barcode, name: candidate.name, size: candidate.size, imageUrl: candidate.imageUrl, category: candidate.category, source: 'photo' }
+        : null,
+    );
+    resetQuote();
+    setCandidate(null);
+  }
+
+  function rejectCandidate() {
+    if (!candidate) return;
+    setPhoto(candidate.photo);
+    setName('');
+    setScan(null);
+    resetQuote();
+    setCandidate(null);
+    setTimeout(() => nameInput.current?.focus(), 200);
   }
 
   async function getPrice() {
@@ -187,6 +253,21 @@ export default function ListItem() {
         </Pressable>
       ) : null}
 
+      <Pressable
+        onPress={identifyFromPhoto}
+        disabled={identifying}
+        style={{ flexDirection: 'row', alignItems: 'center', gap: space.md, padding: space.md, paddingHorizontal: space.lg, borderRadius: radius.lg, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border }}>
+        {identifying ? <ActivityIndicator color={colors.primary} /> : <Icon name="sparkles" size={22} tone="primary" />}
+        <View style={{ flex: 1 }}>
+          <Txt variant="label">{identifying ? 'Looking at your photo…' : 'No barcode? Identify it from a photo'}</Txt>
+          <Txt variant="caption" tone="muted">
+            Snap the front of the package. You confirm before anything is filled in.
+          </Txt>
+        </View>
+      </Pressable>
+
+      {candidate ? <CandidateCard candidate={candidate} onYes={acceptCandidate} onNo={rejectCandidate} /> : null}
+
       {scan ? (
         scan.found ? (
           <Row gap={space.sm}>
@@ -201,8 +282,9 @@ export default function ListItem() {
               No match for {scan.barcode}
             </Txt>
             <Txt variant="caption" tone="muted">
-              Type the name and add a photo below. The barcode is saved with your listing.
+              Identify it from a photo instead, or type the name and add a photo below. The barcode is saved with your listing.
             </Txt>
+            <Button label="Identify from a photo" kind="ghost" icon="sparkles" onPress={identifyFromPhoto} style={{ marginTop: space.sm, height: 42 }} />
           </Card>
         )
       ) : null}
@@ -210,6 +292,7 @@ export default function ListItem() {
       <View style={{ gap: space.sm }}>
         <Txt variant="label">{kind === 'buy' && !scan ? 'Or type what it is' : 'What is it?'}</Txt>
         <TextInput
+          ref={nameInput}
           value={name}
           onChangeText={(t) => {
             setName(t);
@@ -220,6 +303,15 @@ export default function ListItem() {
           style={{ height: 52, borderRadius: radius.md, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, paddingHorizontal: space.lg, color: colors.text, fontSize: 17 }}
         />
       </View>
+
+      {warning ? (
+        <Card style={{ borderColor: colors.danger, backgroundColor: colors.dangerSoft }}>
+          <Txt variant="label" tone="danger">
+            Not allowed on Lobb
+          </Txt>
+          <Txt variant="caption">{warning}</Txt>
+        </Card>
+      ) : null}
 
       {duplicate ? (
         <DuplicateCard item={duplicate} existingListing={state.listings.some((l) => l.itemId === duplicate.id)} />
@@ -308,8 +400,45 @@ export default function ListItem() {
         </>
       )}
 
-      <BarcodeScanner visible={scannerOpen} busy={lookingUp} onScanned={onScanned} onClose={() => setScannerOpen(false)} />
+      <BarcodeScanner visible={scannerOpen} busy={lookingUp} onScanned={onScanned} onClose={() => setScannerOpen(false)} onPhotoInstead={identifyFromPhoto} />
     </ScrollView>
+  );
+}
+
+/** "12 pack", "6-pk", "24 ct": stores often price the case, not one can. */
+const MULTIPACK = /\b\d+\s?-?(pack|pk|ct|count)\b/i;
+
+/** "Is this it?" for a photo the AI identified. */
+function CandidateCard({ candidate, onYes, onNo }: { candidate: Extract<IdentifyResponse, { identified: true }> & { photo: Photo }; onYes: () => void; onNo: () => void }) {
+  const { colors } = useTheme();
+  return (
+    <Card highlight style={{ gap: space.md, backgroundColor: colors.primarySoft }}>
+      <Pill label="IS THIS IT?" tone="primary" icon="sparkles" />
+      <Row>
+        <Image source={{ uri: candidate.imageUrl ?? candidate.photo.uri }} style={{ width: 72, height: 72, borderRadius: radius.md, backgroundColor: '#fff' }} contentFit="contain" />
+        <View style={{ flex: 1, gap: 2 }}>
+          <Txt variant="heading">{candidate.name}</Txt>
+          {candidate.size ? (
+            <Txt variant="caption" tone="muted">
+              {candidate.size}
+            </Txt>
+          ) : null}
+          <Txt variant="caption" tone={candidate.confidence === 'high' ? 'success' : 'warning'}>
+            {candidate.confidence === 'high' ? 'Matched a real product' : candidate.confidence === 'medium' ? 'Pretty sure. Check the size and flavor.' : 'Not sure. Check carefully.'}
+            {candidate.barcode ? ` · barcode ${candidate.barcode}` : ''}
+          </Txt>
+        </View>
+      </Row>
+      {candidate.notAllowed ? (
+        <Txt variant="caption" tone="danger">
+          {candidate.notAllowed}
+        </Txt>
+      ) : null}
+      <Row gap={space.sm}>
+        <Button label="No, I’ll type it" kind="ghost" onPress={onNo} style={{ flex: 1 }} />
+        <Button label="Yes, that’s it" kind="accent" icon="checkmark" onPress={onYes} style={{ flex: 1 }} disabled={!!candidate.notAllowed} />
+      </Row>
+    </Card>
   );
 }
 
@@ -371,8 +500,25 @@ function QuoteCard({ quote, kind, category, price, onPrice, onList }: { quote: P
         <Txt variant="label" tone="muted">
           {kind === 'buy' ? 'Lobb price' : 'Retail value'}
         </Txt>
-        <Pill label={quote.estimated ? 'ESTIMATE' : `via ${quote.source}`} tone={quote.estimated ? 'warning' : 'success'} icon={quote.estimated ? 'alert-circle' : 'checkmark-circle'} />
+        <Pill
+          label={quote.confidence === 'low' ? 'ROUGH ESTIMATE' : quote.confidence === 'high' ? 'HIGH CONFIDENCE' : 'CHECK IT'}
+          tone={quote.confidence === 'high' ? 'success' : 'warning'}
+          icon={quote.confidence === 'high' ? 'checkmark-circle' : 'alert-circle'}
+        />
       </Row>
+      {quote.matchedTitle ? (
+        <Txt variant="caption" tone="muted">
+          Matched: {quote.matchedTitle}
+        </Txt>
+      ) : null}
+      {quote.matchedTitle && MULTIPACK.test(quote.matchedTitle) && !MULTIPACK.test(quote.name) ? (
+        <Row gap={6} style={{ alignItems: 'flex-start' }}>
+          <Icon name="warning" size={16} tone="warning" />
+          <Txt variant="caption" tone="warning" style={{ flex: 1 }}>
+            Stores list this as a multipack. If you’re selling one, set your price for a single one below.
+          </Txt>
+        </Row>
+      ) : null}
       <Txt style={{ fontFamily: fonts.display, fontSize: 34, lineHeight: 40 }}>{money(quote.retailPriceCents)}</Txt>
       <SourceList quote={quote} />
 

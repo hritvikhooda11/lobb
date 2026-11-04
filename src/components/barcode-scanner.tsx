@@ -7,7 +7,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Button, Icon, IconButton, Txt, tap } from '@/components/ui';
 import { radius, space, useTheme } from '@/theme';
 
-const PRODUCT_BARCODES = ['ean13', 'ean8', 'upc_a', 'upc_e'] as const;
+// Retail barcodes, plus Code 128 / ITF-14 that some store-brand and case labels use.
+const PRODUCT_BARCODES = ['ean13', 'ean8', 'upc_a', 'upc_e', 'code128', 'itf14'] as const;
 
 type Mode = 'product' | 'handoff';
 
@@ -47,12 +48,15 @@ export function BarcodeScanner({
   busy,
   onScanned,
   onClose,
+  onPhotoInstead,
   mode = 'product',
 }: {
   visible: boolean;
   busy: boolean;
   onScanned: (code: string) => void;
   onClose: () => void;
+  /** Product mode: offer "Take a photo instead" for barcodes that won't scan. */
+  onPhotoInstead?: () => void;
   mode?: Mode;
 }) {
   const config = MODES[mode];
@@ -133,6 +137,18 @@ export function BarcodeScanner({
               </Txt>
               {busy ? <ActivityIndicator color={colors.accent} style={{ marginTop: space.md }} /> : null}
             </View>
+            {onPhotoInstead ? (
+              <View style={{ alignItems: 'center', paddingBottom: space.md }}>
+                <Pressable
+                  onPress={onPhotoInstead}
+                  style={{ flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: colors.accent, borderRadius: radius.pill, paddingHorizontal: space.xl, height: 52 }}>
+                  <Icon name="sparkles" size={18} color={colors.onAccent} />
+                  <Txt variant="label" style={{ color: colors.onAccent }}>
+                    Won’t scan? Take a photo instead
+                  </Txt>
+                </Pressable>
+              </View>
+            ) : null}
             <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: space.xl, paddingBottom: insets.bottom + space.xl }}>
               <IconButton icon={torch ? 'flashlight' : 'flashlight-outline'} size={52} onPress={() => setTorch(!torch)} />
               <Pressable
@@ -178,6 +194,7 @@ export function BarcodeScanner({
                 style={{ height: 56, borderRadius: radius.md, backgroundColor: '#1c1c1e', color: '#fff', fontSize: 22, letterSpacing: 2, textAlign: 'center' }}
               />
               <Button label={busy ? 'Checking…' : mode === 'product' ? 'Look it up' : 'Confirm code'} kind="accent" disabled={busy || !config.valid(typed)} onPress={submitTyped} />
+              {onPhotoInstead ? <Button label="Identify it from a photo" kind="ghost" icon="sparkles" onPress={onPhotoInstead} /> : null}
               {cameraBlocked ? (
                 <Button label="Turn on camera in Settings" kind="ghost" icon="settings-outline" onPress={() => Linking.openSettings()} />
               ) : HAS_CAMERA ? (

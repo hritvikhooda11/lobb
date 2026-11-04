@@ -2,10 +2,12 @@
  * GET /api/barcode?code=049000050103 — looks up a scanned product.
  *
  * Checks the free Open Food Facts family of databases (food, then beauty, then general
- * products) and returns a clean name, size, photo and a best-guess Lobb category.
- * Runs server-side so the app makes one request and we control the User-Agent.
+ * products), then UPCitemdb, which also covers store brands (Target's Good & Gather and up&up,
+ * Kirkland…) that Open Food Facts often misses. Returns a clean name, size, photo and a
+ * best-guess Lobb category. Runs server-side so the app makes one request.
  */
 import type { CategoryId } from '@/data/catalog';
+import { upcLookup } from '@/lib/server/products';
 
 export type BarcodeResponse =
   | { found: false; barcode: string }
@@ -49,7 +51,42 @@ export async function GET(request: Request) {
       source: source.label,
     } satisfies BarcodeResponse);
   }
+
+  const upc = await upcLookup(barcode);
+  if (upc?.title) {
+    return Response.json({
+      found: true,
+      barcode,
+      name: withBrand(cleanTitle(upc.title), upc.brand),
+      size: sizeFromTitle(upc.title),
+      imageUrl: upc.imageUrl,
+      category: categoryFromPath(upc.category),
+      source: 'UPCitemdb',
+    } satisfies BarcodeResponse);
+  }
   return Response.json({ found: false, barcode } satisfies BarcodeResponse);
+}
+
+/** "Zen Party Trail Mix - 21oz - Good & Gather™" → "Zen Party Trail Mix" */
+function cleanTitle(title: string) {
+  return title.replace(/[™®]/g, '').split(/\s+-\s+/)[0].replace(/,\s*\d.*$/, '').trim();
+}
+
+/** Pulls "21oz" / "12 fl oz" / "4 ct" out of a retailer title. */
+function sizeFromTitle(title: string) {
+  return /(\d+(?:\.\d+)?\s?(?:fl\.? ?oz|oz|ct|count|pk|pack|ml|l|g|lb|in|ft))\b/i.exec(title)?.[1] ?? '';
+}
+
+/** UPCitemdb categories look like "Food, Beverages & Tobacco > Beverages > Soda". */
+function categoryFromPath(path: string): CategoryId | null {
+  const p = path.toLowerCase();
+  if (/beverage|drink|soda|water|juice|coffee|tea\b/.test(p)) return 'drinks';
+  if (/noodle|soup|pasta|meal/.test(p)) return 'instant';
+  if (/snack|candy|chip|cookie|cracker|nut|chocolate|food/.test(p)) return 'snacks';
+  if (/personal care|health & beauty|oral|deodorant|soap|shampoo|cosmetic/.test(p)) return 'toiletries';
+  if (/electronic|cable|charger|batter|computer|phone/.test(p)) return 'electronics';
+  if (/household|home|kitchen|cleaning|paper/.test(p)) return 'household';
+  return null;
 }
 
 async function fetchProduct(host: string, barcode: string): Promise<OffProduct | null> {
