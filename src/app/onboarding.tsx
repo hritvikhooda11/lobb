@@ -23,6 +23,10 @@ async function devSignIn(email: string, verify: (email: string, code: string) =>
 
 const isUwEmail = (e: string) => (__DEV__ ? /^[^\s@]+@[^\s@]+\.[^\s@]+$/ : /^[^\s@]+@uw\.edu$/i).test(e.trim());
 
+
+/** Email sign-in codes are 6–8 digits (Supabase Auth → Email OTP length). */
+const CODE_MIN = 6;
+const CODE_MAX = 8;
 export default function Onboarding() {
   const { colors } = useTheme();
   const { state, actions } = useStore();
@@ -90,7 +94,7 @@ export default function Onboarding() {
               style={inputStyle(isUwEmail(email))}
             />
             <Txt variant="caption" tone="muted">
-              Only @uw.edu addresses, so everyone in your building is a verified student.{DEMO_LOGIN ? '' : ' We’ll email you a 6-digit code.'}
+              Only @uw.edu addresses, so everyone in your building is a verified student.{DEMO_LOGIN ? '' : ' We’ll email you a sign-in code.'}
             </Txt>
             <Button
               label={busy ? (DEMO_LOGIN ? 'Signing in…' : 'Sending…') : DEMO_LOGIN ? 'Continue' : 'Email me a code'}
@@ -120,19 +124,20 @@ export default function Onboarding() {
             <TextInput
               value={code}
               onChangeText={(t) => {
-                const next = t.replace(/\D/g, '').slice(0, 6);
+                // Supabase sends 6–8 digits depending on the project's OTP length setting.
+                const next = t.replace(/\D/g, '').slice(0, CODE_MAX);
                 setCode(next);
-                if (next.length === 6) Keyboard.dismiss();
+                if (next.length === CODE_MAX) Keyboard.dismiss();
               }}
-              placeholder="123456"
+              placeholder="12345678"
               placeholderTextColor={colors.textMuted}
               keyboardType="number-pad"
               autoComplete="one-time-code"
               textContentType="oneTimeCode"
               autoFocus
-              style={[inputStyle(code.length === 6), { fontFamily: fonts.display, fontSize: 28, letterSpacing: 8, textAlign: 'center' }]}
+              style={[inputStyle(code.length >= CODE_MIN), { fontFamily: fonts.display, fontSize: 28, letterSpacing: 8, textAlign: 'center' }]}
             />
-            <Button label={busy ? 'Checking…' : 'Sign in'} disabled={code.length !== 6 || busy} onPress={() => run(() => actions.verifyCode(email, code))} />
+            <Button label={busy ? 'Checking…' : 'Sign in'} disabled={code.length < CODE_MIN || busy} onPress={() => run(() => actions.verifyCode(email, code))} />
             <Row style={{ justifyContent: 'space-between' }}>
               <Pressable onPress={() => setCodeSent(false)} hitSlop={8}>
                 <Txt variant="caption" tone="primary">
