@@ -110,15 +110,15 @@ Supabase is already Lobb's real, hosted backend (database, sign-in, realtime, ph
 ### 7a. Real email for sign-in codes (Resend)
 Supabase's built-in email only sends a few messages an hour and lands in spam, so codes must go through your own email provider. **Resend** is the simplest (free tier: about 3,000 emails/month, 100/day, plenty for a UW pilot). AWS SES also works (cheaper at scale, but needs a sandbox-exit request to AWS, which takes a day or more); the Supabase side is the same, only the host/user/password differ.
 
-1. **(you, ~$12/yr) Buy a domain**, e.g. `lobbapp.com` (the iOS bundle id is already `com.lobbapp.lobb`). Cloudflare Registrar, Namecheap or Porkbun are fine. You can't send from `@gmail.com` or `@uw.edu`.
-2. **(you) Create a Resend account** at resend.com → **Domains → Add domain** → enter `mail.lobbapp.com` (a subdomain keeps your main domain's reputation separate) and region **us-east-1**.
+1. **(you, ~$12/yr) Buy a domain**, e.g. `getlobb.com` (the iOS bundle id `com.lobbapp.lobb` doesn't need to match). Cloudflare Registrar, Namecheap or Porkbun are fine. You can't send from `@gmail.com` or `@uw.edu`.
+2. **(you) Create a Resend account** at resend.com → **Domains → Add domain** → enter `mail.getlobb.com` (a subdomain keeps your main domain's reputation separate) and region **us-east-1**.
 3. **(you, DNS)** Resend shows 3–4 records (an MX and a TXT for SPF on `send.mail…`, a TXT `resend._domainkey…` for DKIM). Add each one exactly at your registrar's DNS page. Also add a DMARC record so UW's mail servers trust it: type `TXT`, name `_dmarc`, value `v=DMARC1; p=none;`. Click **Verify** in Resend; it usually turns green within minutes (can take a few hours).
 4. **(you)** Resend → **API Keys → Create** with permission **Sending access**, limited to that domain. Copy it once; don't paste it anywhere except the next step.
 5. **(you)** Supabase → **Authentication → Emails → SMTP Settings → Enable custom SMTP**:
 
 | Field | Value |
 |---|---|
-| Sender email | `codes@mail.lobbapp.com` |
+| Sender email | `codes@mail.getlobb.com` |
 | Sender name | `Lobb` |
 | Host | `smtp.resend.com` |
 | Port | `465` |
@@ -142,7 +142,7 @@ Supabase's built-in email only sends a few messages an hour and lands in spam, s
 delete from public.allowed_email_domains where domain = 'gmail.com';
 ```
 
-9. Test: sign in on the web preview with your `@uw.edu` address. The code should arrive within a minute (check UW's quarantine at first; DMARC helps). Resend → **Emails** shows each delivery.
+9. Nothing changes in the app: Supabase sends the email, the app only asks for and checks the code. Test: sign in on the web preview with your `@uw.edu` address. The code should arrive within a minute (check UW's quarantine at first; DMARC helps). Resend → **Emails** shows each delivery.
 
 ### 7b. Host the API routes (EAS Hosting)
 `/api/price`, `/api/barcode` and `/api/identify` run on the server (they hold keys). In development they run on your laptop; a phone away from your Wi-Fi can't reach that. EAS Hosting runs them at `https://lobb.expo.app`, which `app.json` already points the app at (`expo-router` plugin `origin`). The dev-only routes (`/api/dev-code`, `/api/dev-reset`) always return 404 there.
@@ -189,4 +189,4 @@ npm run deploy:api
 - Other monthly costs: domain (~$1), Resend (free to start), EAS (free: 100k API requests/month and 15 iOS builds), Anthropic (cents per priced item), Apple Developer Program ($99/year, needed for TestFlight).
 
 ### 7e. Still open before App Review
-Apple's reviewers need a way to sign in, and they don't have a UW email. Plan one before submitting: for example allow your own domain (`insert into public.allowed_email_domains values ('lobbapp.com');`, which only you can create addresses on), make `review@lobbapp.com` forward to you, and put it in App Store Connect → App Review Information with a note that the code arrives by email. Release builds currently only accept `@uw.edu` in the app (`src/app/onboarding.tsx`), so that check needs to allow the reviewer address too.
+Apple's reviewers need a way to sign in, and they don't have a UW email. Plan one before submitting: for example allow your own domain (`insert into public.allowed_email_domains values ('getlobb.com');`, which only you can create addresses on), make `review@getlobb.com` forward to you, and put it in App Store Connect → App Review Information with a note that the code arrives by email. Release builds currently only accept `@uw.edu` in the app (`src/app/onboarding.tsx`), so that check needs to allow the reviewer address too.
