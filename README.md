@@ -22,8 +22,8 @@ Students request sealed everyday items (snacks, drinks, toiletries, chargers) or
 | Layer | Tech |
 |---|---|
 | App | React Native · Expo SDK 58 (React Native 0.88) · Expo Router · TypeScript (strict) · React Compiler |
-| Backend | Supabase: Postgres, Auth (email OTP), Realtime, Storage, pg_cron, Edge Functions (push) |
-| Server routes | Expo Router API routes (`/api/price`, `/api/barcode`) |
+| Backend | Supabase: Postgres, Auth (email OTP, sent through Resend SMTP), Realtime, Storage, pg_cron, Edge Functions (push) |
+| Server routes | Expo Router API routes (`/api/price`, `/api/barcode`, `/api/identify`), hosted on EAS Hosting at `lobb.expo.app` |
 | AI | Claude (Anthropic API) with web search + structured outputs |
 | Device | expo-camera (barcode/QR scanning), expo-image-picker, haptics |
 | Testing | PGlite (Postgres in WASM) test suite for the database rules |
@@ -38,6 +38,7 @@ The app is treated as untrusted, so every rule that matters lives in Postgres:
 - **Handoff codes are readable only by the buyer.** The deliverer must scan them in person, and five wrong guesses lock the code. (The test suite caught that the original lockout was silently rolled back by an exception, and it was fixed.)
 - A **listed-seller priority window**: neighbors who listed the item see requests first; everyone else after 20 seconds.
 - Sign-ups are restricted to allowed email domains (`uw.edu`) by a database trigger.
+- The session saved on the phone is encrypted (AES-256-GCM, key in the Keychain/Keystore). Dev-only sign-in routes return 404 in production builds and on the hosted API.
 
 `npm run test:db` runs the migrations in PGlite and plays three students through the buy, rental and listing flows, plus the abuse cases (cross-building access, double accepts, code brute-forcing, price tampering).
 
@@ -69,6 +70,17 @@ npx eas build --profile development --platform ios
 ```
 
 Then `npx expo start` and open the dev build. Server setup (Edge Function + webhooks) is in [SUPABASE_SETUP.md](SUPABASE_SETUP.md#6-push-notifications).
+
+## Production
+
+The backend is the hosted Supabase project; the API routes deploy to EAS Hosting and release builds call them at `https://lobb.expo.app` (`origin` in `app.json`). Server keys live in EAS environment variables, never in the app.
+
+```bash
+npm run deploy:api        # export + deploy API routes to EAS Hosting (production)
+npx eas-cli@latest build --profile production --platform ios
+```
+
+Full launch checklist (email domain + Resend SMTP, EAS secrets, Supabase plan): [SUPABASE_SETUP.md § 7](SUPABASE_SETUP.md#7-going-live-before-testflight).
 
 ---
 

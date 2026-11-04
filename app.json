@@ -32,7 +32,12 @@
       "favicon": "./assets/images/favicon.png"
     },
     "plugins": [
-      "expo-router",
+      [
+        "expo-router",
+        {
+          "origin": "https://lobb.expo.app/"
+        }
+      ],
       [
         "expo-splash-screen",
         {
@@ -55,7 +60,8 @@
           "color": "#6D3CF0",
           "defaultChannel": "default"
         }
-      ]
+      ],
+      "expo-secure-store"
     ],
     "experiments": {
       "typedRoutes": true,

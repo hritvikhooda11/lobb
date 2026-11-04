@@ -7,6 +7,8 @@ import { createClient } from '@supabase/supabase-js';
 import { decode } from 'base64-arraybuffer';
 import { AppState, Platform } from 'react-native';
 
+import { secureSessionStorage } from './secure-session';
+
 const url = process.env.EXPO_PUBLIC_SUPABASE_URL;
 const key = process.env.EXPO_PUBLIC_SUPABASE_KEY;
 
@@ -14,8 +16,8 @@ export const supabaseConfigured = !!url && !!key;
 
 export const supabase = createClient(url || 'https://not-configured.supabase.co', key || 'not-configured', {
   auth: {
-    // TODO before launch: encrypt the session at rest (expo-secure-store + aes-js, see Supabase Expo guide).
-    storage: Platform.OS === 'web' && typeof window === 'undefined' ? undefined : AsyncStorage,
+    // Phones: session encrypted at rest (key in Keychain/Keystore). Web: browser storage; server render: none.
+    storage: Platform.OS === 'web' ? (typeof window === 'undefined' ? undefined : AsyncStorage) : secureSessionStorage,
     autoRefreshToken: true,
     persistSession: true,
     detectSessionInUrl: false,

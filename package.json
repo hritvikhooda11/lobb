@@ -12,6 +12,7 @@
     "expo": "^58.0.19",
     "expo-camera": "~58.0.12",
     "expo-constants": "~58.0.13",
+    "expo-crypto": "~58.0.7",
     "expo-dev-client": "~58.0.15",
     "expo-device": "~58.0.5",
     "expo-font": "~58.0.10",
@@ -22,6 +23,7 @@
     "expo-linking": "~58.0.14",
     "expo-notifications": "~58.1.6",
     "expo-router": "~58.0.26",
+    "expo-secure-store": "~58.0.2",
     "expo-server": "~58.0.6",
     "expo-splash-screen": "~58.0.11",
     "expo-status-bar": "~58.0.4",
@@ -55,7 +57,8 @@
     "ios": "expo start --ios",
     "web": "expo start --web",
     "lint": "expo lint",
-    "test:db": "node supabase/tests/flows.test.mjs"
+    "test:db": "node supabase/tests/flows.test.mjs",
+    "deploy:api": "expo export --platform web && npx eas-cli@latest deploy --prod --environment production"
   },
   "private": true
 }
