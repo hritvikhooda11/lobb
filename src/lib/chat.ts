@@ -5,7 +5,7 @@
  */
 import { useCallback, useEffect, useState } from 'react';
 
-import { friendlyError, supabase } from '@/lib/supabase';
+import { friendlyError, supabase, uniqueChannel } from '@/lib/supabase';
 
 export type Thread = { requestId: string } | { shoutoutId: string; neighborId: string };
 
@@ -44,8 +44,7 @@ export function useThread(thread: Thread | null) {
       setMessages(((data ?? []) as DbMessage[]).map(toMessage));
       setLoaded(true);
     });
-    const channel = supabase
-      .channel(`chat-${key}`)
+    const channel = uniqueChannel(`chat-${key}`)
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, (payload) => {
         const row = payload.new as DbMessage;
         if (!inThread(row, thread)) return;
@@ -107,8 +106,7 @@ export function useShoutoutThreads(shoutoutId: string, enabled = true) {
       if (!cancelled) setThreads([...byNeighbor.values()].sort((a, b) => b.lastAt - a.lastAt));
     };
     void load();
-    const channel = supabase
-      .channel(`shoutout-threads-${shoutoutId}`)
+    const channel = uniqueChannel(`shoutout-threads-${shoutoutId}`)
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages', filter: `shoutout_id=eq.${shoutoutId}` }, () => void load())
       .subscribe();
     return () => {

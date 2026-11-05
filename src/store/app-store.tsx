@@ -12,7 +12,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { bundledItem, type CategoryId, type Item, type ItemKind } from '@/data/catalog';
 import { sellerEarnings, type Fulfillment, type PriceBreakdown } from '@/data/pricing';
 import { unregisterRemotePush } from '@/lib/notify';
-import { friendlyError, publicPhotoUrl, supabase, uploadPhoto } from '@/lib/supabase';
+import { friendlyError, publicPhotoUrl, supabase, uniqueChannel, uploadPhoto } from '@/lib/supabase';
 
 export const DELIVERY_WINDOW_MS = 10 * 60 * 1000;
 
@@ -502,8 +502,7 @@ function useAppState() {
       // Catalog first: a sale or loan changes who has what, so "nearby" counts must refresh too.
       timer = setTimeout(() => refreshAll().catch(() => {}), 250);
     };
-    const channel: RealtimeChannel = supabase
-      .channel('lobb-requests')
+    const channel: RealtimeChannel = uniqueChannel('lobb-requests')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'requests' }, soon)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'shoutouts' }, soon)
       .subscribe();

@@ -48,3 +48,10 @@ export function friendlyError(error: unknown) {
   if (/Database error saving new user/i.test(message)) return 'Lobb is only open to @uw.edu email addresses.';
   return message.replace(/^.*?exception:\s*/i, '');
 }
+
+/**
+ * A Realtime channel with a unique name. Supabase reuses a channel with the same name, so when a
+ * screen re-subscribes (React re-running an effect, or reopening a screen) before the old channel is
+ * removed, adding listeners to the reused, already-subscribed channel throws.
+ */
+export const uniqueChannel = (name: string) => supabase.channel(`${name}-${Math.random().toString(36).slice(2, 10)}`);

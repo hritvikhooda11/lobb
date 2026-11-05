@@ -10,7 +10,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Icon, Txt } from '@/components/ui';
 import { chatHref, isThreadOpen, threadKey, type Thread } from '@/lib/chat';
 import { notify, systemNotificationsSupported } from '@/lib/notify';
-import { supabase } from '@/lib/supabase';
+import { supabase, uniqueChannel } from '@/lib/supabase';
 import { useStore } from '@/store/app-store';
 import { radius, space, useTheme } from '@/theme';
 
@@ -26,8 +26,7 @@ export function MessageAlerts() {
 
   useEffect(() => {
     if (!userId) return;
-    const channel = supabase
-      .channel('lobb-messages')
+    const channel = uniqueChannel('lobb-messages')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, async (payload) => {
         const m = payload.new as { request_id: string | null; shoutout_id: string | null; neighbor_id: string | null; sender_id: string; body: string };
         if (m.sender_id === userId) return;
