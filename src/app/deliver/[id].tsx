@@ -102,6 +102,7 @@ export default function Deliver() {
           <Txt tone="muted" center>
             {rent && job.returnBy ? `Added to your wallet. ${job.buyerName} returns it in ${formatDue(job.returnBy - now)}.` : 'Added to your wallet. Nice hustle.'}
           </Txt>
+          <RateBuyer job={job} />
           <Button label="Back to requests" kind="accent" onPress={goHome} style={{ alignSelf: 'stretch' }} />
         </View>
       ) : null}
@@ -272,6 +273,7 @@ function ConditionCheck({ jobId }: { jobId: string }) {
 }
 
 function Handoff({ job }: { job: Job }) {
+  const { colors } = useTheme();
   const { actions } = useStore();
   const [code, setCode] = useState<string | null>(null);
   const [scannerOpen, setScannerOpen] = useState(false);
@@ -307,6 +309,16 @@ function Handoff({ job }: { job: Job }) {
   return (
     <View style={{ marginTop: space.xl, gap: space.md }}>
       <Txt variant="title">{title}</Txt>
+      {job.buyerHereAt ? (
+        <Card style={{ backgroundColor: colors.accentSoft, borderColor: colors.accent }}>
+          <Row gap={space.sm}>
+            <Icon name="notifications" size={20} tone="accent" />
+            <Txt variant="label" style={{ flex: 1 }}>
+              {job.buyerName} {f === 'pickup' ? 'is at your door' : 'is waiting in the lobby'}
+            </Txt>
+          </Row>
+        </Card>
+      ) : null}
       <Card>
         <Row gap={6}>
           <Icon name={option.icon} size={16} tone="primary" />
@@ -399,6 +411,38 @@ function ReturnScan({ job }: { job: Job }) {
           setScannerOpen(false);
         }}
       />
+    </View>
+  );
+}
+
+/** The neighbor rates the buyer (can be changed). */
+function RateBuyer({ job }: { job: Job }) {
+  const { colors } = useTheme();
+  const { actions } = useStore();
+  const [stars, setStars] = useState(job.buyerRating ?? 0);
+  return (
+    <View style={{ alignItems: 'center', gap: space.sm }}>
+      <Txt tone="muted">How was {job.buyerName}?</Txt>
+      <Row gap={space.sm}>
+        {[1, 2, 3, 4, 5].map((n) => (
+          <Pressable
+            key={n}
+            hitSlop={6}
+            onPress={async () => {
+              tap();
+              const before = stars;
+              setStars(n);
+              if (!(await attempt(() => actions.rateRequest(job.id, n)))) setStars(before);
+            }}>
+            <Icon name={n <= stars ? 'star' : 'star-outline'} size={32} color={n <= stars ? colors.warning : colors.textMuted} />
+          </Pressable>
+        ))}
+      </Row>
+      {stars ? (
+        <Txt variant="caption" tone="muted">
+          Thanks! Tap a star to change it.
+        </Txt>
+      ) : null}
     </View>
   );
 }

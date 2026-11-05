@@ -20,7 +20,11 @@ export type RequestStatus = 'open' | 'accepted' | 'arriving' | 'delivered' | 're
 
 export const LIVE_STATUSES: RequestStatus[] = ['open', 'accepted', 'arriving', 'renting', 'returning'];
 
-export type Person = { name: string; rating: number };
+/** `ratingCount` 0 = new (no ratings yet). */
+export type Person = { name: string; rating: number; ratingCount: number };
+
+/** "★ 4.5" or "New" for someone nobody has rated yet. */
+export const ratingLabel = (p?: { rating: number; ratingCount: number }) => (p && p.ratingCount > 0 ? `★ ${p.rating.toFixed(1)}` : 'New');
 
 /** A request you made, shaped for the buyer screens. */
 export type Request = {
@@ -46,6 +50,8 @@ export type Request = {
   /** The code to show as a QR right now (handoff, or return while returning). */
   code?: string;
   rating?: number;
+  /** When you last told the seller you're here (lobby or their door). */
+  buyerHereAt?: number;
 };
 
 export type JobStatus = 'incoming' | 'accepted' | 'verified' | 'arrived' | 'delivered' | 'returning' | 'returned' | 'closed';
@@ -72,6 +78,11 @@ export type Job = {
   deliveredAt?: number;
   returnBy?: number;
   rentalLabel?: string;
+  /** When the buyer said they're waiting (lobby, or at your door for a pickup). */
+  buyerHereAt?: number;
+  /** Your rating of the buyer. */
+  buyerRating?: number;
+  buyer?: Person;
 };
 
 export type Listing = { itemId: string; quantity: number; active: boolean; adjustPct: number };
@@ -83,6 +94,8 @@ export type Profile = {
   communityId: string | null;
   room: string | null;
   rating: number;
+  /** How many ratings you've received (0 = new). */
+  ratingCount: number;
   reliability: number;
   /** Lobb admins can sell alcohol. Set by Lobb staff only. */
   isAdmin: boolean;
@@ -159,6 +172,8 @@ type DbRequest = {
   delivered_at: string | null;
   return_by: string | null;
   rating: number | null;
+  buyer_rating: number | null;
+  buyer_here_at: string | null;
   created_at: string;
 };
 
@@ -266,7 +281,7 @@ function useAppState() {
 
   const loadProfile = useCallback(async (userId: string) => {
     const [row, home] = await Promise.all([
-      must(supabase.from('profiles').select('id, name, community_id, rating_avg, reliability_score, role, notify_shoutouts').eq('id', userId).maybeSingle()),
+      must(supabase.from('profiles').select('id, name, community_id, rating_avg, rating_count, reliability_score, role, notify_shoutouts').eq('id', userId).maybeSingle()),
       must(supabase.from('home_details').select('room, birthdate').eq('user_id', userId).maybeSingle()),
     ]);
     const community = row?.community_id
@@ -279,6 +294,7 @@ function useAppState() {
           communityId: row.community_id,
           room: home?.room ?? null,
           rating: Number(row.rating_avg),
+          ratingCount: row.rating_count,
           reliability: row.reliability_score,
           isAdmin: row.role === 'admin',
           isSeller: row.role === 'seller' || row.role === 'admin',
@@ -328,13 +344,13 @@ function useAppState() {
     // Rooms are private to the two people in a request, so this only returns rows we're a party to.
     const roomIds = [...myRequests.map((r) => r.id), ...jobRows.filter((r) => r.accepted_by === userId).map((r) => r.id)];
     const [people, codes, rooms] = await Promise.all([
-      peopleIds.length ? must(supabase.from('profiles').select('id, name, rating_avg').in('id', peopleIds)) : Promise.resolve([]),
+      peopleIds.length ? must(supabase.from('profiles').select('id, name, rating_avg, rating_count').in('id', peopleIds)) : Promise.resolve([]),
       liveIds.length ? must(supabase.from('handoff_codes').select('request_id, purpose, code').in('request_id', liveIds)) : Promise.resolve([]),
       roomIds.length ? must(supabase.from('request_private').select('request_id, buyer_room, seller_room').in('request_id', roomIds)) : Promise.resolve([]),
     ]);
     const roomsFor = (id: string) => (rooms ?? []).find((x) => x.request_id === id);
     const myRoom = stateRef.current.profile?.room ?? undefined;
-    const personById = new Map((people ?? []).map((p) => [p.id, { name: p.name as string, rating: Number(p.rating_avg) }]));
+    const personById = new Map((people ?? []).map((p) => [p.id, { name: p.name as string, rating: Number(p.rating_avg), ratingCount: p.rating_count as number }]));
     const codeFor = (id: string, purpose: string) => (codes ?? []).find((c) => c.request_id === id && c.purpose === purpose)?.code as string | undefined;
 
     const requests: Request[] = myRequests.map((r) => ({
@@ -356,6 +372,7 @@ function useAppState() {
       deliverer: r.accepted_by ? personById.get(r.accepted_by) : undefined,
       code: codeFor(r.id, r.status === 'returning' ? 'return' : 'handoff'),
       rating: r.rating ?? undefined,
+      buyerHereAt: ms(r.buyer_here_at),
     }));
 
     const { items, listings, profile } = stateRef.current;
@@ -401,6 +418,9 @@ function useAppState() {
           deliveredAt: ms(r.delivered_at),
           returnBy: ms(r.return_by),
           rentalLabel: rentalLabel(r.rental_hours),
+          buyerHereAt: ms(r.buyer_here_at),
+          buyerRating: r.buyer_rating ?? undefined,
+          buyer: personById.get(r.buyer_id),
         };
       });
 
@@ -571,9 +591,13 @@ function useAppState() {
       },
       cancelRequest: (id: string) => rpc('cancel_request', { p_id: id }),
       startReturn: (id: string) => rpc('start_return', { p_id: id }),
+      /** Buyer rates the neighbor who delivered, or the neighbor rates the buyer. Can be changed. */
       rateRequest: async (id: string, stars: number) => {
         await must(supabase.rpc('rate_request', { p_id: id, p_stars: stars }));
+        await Promise.all([loadActivity(), loadProfile(uid())]);
       },
+      /** Buyer: "I'm here" (waiting in the lobby, or at the seller's door for a pickup). Notifies the seller. */
+      buyerHere: (id: string) => rpc('buyer_here', { p_id: id }),
 
       acceptJob: (id: string) => rpc('accept_request', { p_id: id }),
       declineJob: (id: string) => setState((s) => ({ ...s, jobs: s.jobs.filter((j) => j.id !== id) })),

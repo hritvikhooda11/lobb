@@ -4,7 +4,7 @@ import { Pressable, Switch, View } from 'react-native';
 import { Button, Card, Divider, Icon, Pill, Row, Screen, SectionHeader, Txt, tap } from '@/components/ui';
 import { attempt, confirm } from '@/lib/alert';
 import { communities } from '@/data/catalog';
-import { useStore } from '@/store/app-store';
+import { ratingLabel, useStore } from '@/store/app-store';
 import { space, useTheme } from '@/theme';
 
 const DEMO_TOOLS = __DEV__ && process.env.EXPO_PUBLIC_DEMO_LOGIN === '1';
@@ -37,7 +37,7 @@ export default function Profile() {
       </View>
 
       <Row style={{ marginTop: space.xl }} gap={space.md}>
-        <Stat label="Rating" value={`★ ${user.rating.toFixed(1)}`} />
+        <Stat label={user.ratingCount ? `Rating (${user.ratingCount})` : 'Rating'} value={ratingLabel(user)} />
         <Stat label="Reliability" value={`${user.reliability}%`} />
         <Stat label="Deliveries" value={String(delivered)} />
       </Row>

@@ -145,6 +145,14 @@ qty === 2 ? ok('listing quantity 3 → 2') : bad(`quantity ${qty}`);
 await expectOk('alex rates 4 stars', ids.alex, `select public.rate_request($1, 4)`, [req.id]);
 const rating = one(await db.query(`select rating_avg, rating_count from public.profiles where id = $1`, [ids.bri]));
 Number(rating?.rating_avg) === 4 && rating?.rating_count === 1 ? ok('bri rating now 4.0') : bad(`rating ${JSON.stringify(rating)}`);
+await expectOk('alex changes it to 2 stars', ids.alex, `select public.rate_request($1, 2)`, [req.id]);
+const rerated = one(await db.query(`select rating_avg, rating_count from public.profiles where id = $1`, [ids.bri]));
+Number(rerated?.rating_avg) === 2 && rerated?.rating_count === 1 ? ok('changing a rating replaces it (2.0, still 1 rating)') : bad(`re-rate ${JSON.stringify(rerated)}`);
+await expectOk('bri rates alex 5 stars', ids.bri, `select public.rate_request($1, 5)`, [req.id]);
+const buyerRating = one(await db.query(`select rating_avg, rating_count from public.profiles where id = $1`, [ids.alex]));
+Number(buyerRating?.rating_avg) === 5 && buyerRating?.rating_count === 1 ? ok('sellers rate buyers too (alex 5.0, 1 rating)') : bad(`buyer rating ${JSON.stringify(buyerRating)}`);
+await expectFail('a bystander can’t rate it', ids.dan, `select public.rate_request($1, 1)`, [req.id], /once it’s handed over/);
+await expectFail('stars must be 1–5', ids.alex, `select public.rate_request($1, 9)`, [req.id], /1–5/);
 
 console.log('\nRental flow');
 await expectOk('bri lists TI-84 for rent', ids.bri, `insert into public.listings (item_id) values ('ti84')`);
@@ -356,6 +364,25 @@ await expectOk('bri messages alex on the order', ids.bri, `insert into public.me
 await expectFail('dan can’t message into their order', ids.dan, `insert into public.messages (request_id, body) values ($1, 'hi')`, [rushClaim.id]);
 const chatPush = await asServer(`select * from public.push_messages('messages', (select id from public.messages where request_id = $1 limit 1))`, [rushClaim.id]);
 chatPush.length === 1 && chatPush[0].url === `/chat?request=${rushClaim.id}` && chatPush[0].kind === 'message' ? ok('chat message pushes to the other person only') : bad(`chat push ${JSON.stringify(chatPush)}`);
+
+console.log('\nArrivals');
+await db.exec(`update public.requests set status = 'cancelled' where status in ('open', 'accepted', 'arriving', 'renting', 'returning')`);
+await as(ids.dan, `select public.register_push_token('ExponentPushToken[dan-2]', 'ios')`);
+await as(ids.alex, `select public.register_push_token('ExponentPushToken[alex-2]', 'ios')`);
+const lobbyReq = one(await expectOk('alex orders water for a lobby meetup', ids.alex, `select * from public.create_request('water-16', '', null, 'lobby')`));
+await expectOk('dan accepts', ids.dan, `select public.accept_request($1)`, [lobbyReq.id]);
+await expectOk('alex says she’s in the lobby', ids.alex, `select public.buyer_here($1)`, [lobbyReq.id]);
+await expectFail('can’t spam it', ids.alex, `select public.buyer_here($1)`, [lobbyReq.id], /Give it a minute/);
+await expectFail('the seller can’t press the buyer’s button', ids.dan, `select public.buyer_here($1)`, [lobbyReq.id]);
+const hereEvt = one(await db.query(`select id from public.request_events where request_id = $1 and kind = 'buyer_here'`, [lobbyReq.id]));
+const herePush = await asServer(`select * from public.push_messages('request_events', $1)`, [hereEvt.id]);
+herePush.length === 1 && herePush[0].token === 'ExponentPushToken[dan-2]' && /waiting in the lobby/.test(herePush[0].title) ? ok(`seller is pinged: “${herePush[0].title}”`) : bad(`buyer_here push ${JSON.stringify(herePush)}`);
+await expectOk('dan verifies the seal', ids.dan, `select public.verify_seal($1, 'x/seal.jpg')`, [lobbyReq.id]);
+await expectOk('dan is in the lobby', ids.dan, `select public.mark_arrived($1)`, [lobbyReq.id]);
+const arrEvt = one(await db.query(`select id from public.request_events where request_id = $1 and kind = 'seller_arrived'`, [lobbyReq.id]));
+const arrPush = await asServer(`select * from public.push_messages('request_events', $1)`, [arrEvt.id]);
+arrPush.length > 0 && arrPush.every((m) => m.token.startsWith('ExponentPushToken[alex')) && /is in the lobby/.test(arrPush[0].title) && arrPush[0].url === `/request/${lobbyReq.id}` ? ok(`buyer is pinged: “${arrPush[0].title}”`) : bad(`arrival push ${JSON.stringify(arrPush)}`);
+await expectFail('users can’t read the event log', ids.alex, `select * from public.request_events`, [], /permission denied/);
 
 console.log('\nRegistered sellers');
 await db.exec(`insert into public.seller_invites (code, note) values ('LOBBTEST1', 'test')`);

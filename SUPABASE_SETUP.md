@@ -76,13 +76,14 @@ npx supabase functions deploy push --no-verify-jwt
 ```
 (`--no-verify-jwt` because the database webhook calls it, not the app; it checks the secret header instead. If you turn on **Enhanced push security** in the EAS dashboard, also `npx supabase secrets set EXPO_ACCESS_TOKEN=<token>`.)
 
-**c. Add three database webhooks.** **Database → Webhooks → Create a new hook**, once for each table:
+**c. Add four database webhooks.** **Database → Webhooks → Create a new hook**, once for each table:
 
 | Name | Table | Events | Type | Function | HTTP header |
 |---|---|---|---|---|---|
 | `push_shoutouts` | `shoutouts` | Insert | Supabase Edge Functions | `push` (POST) | `x-lobb-webhook-secret: <your-secret>` |
 | `push_requests` | `requests` | Insert | Supabase Edge Functions | `push` (POST) | `x-lobb-webhook-secret: <your-secret>` |
 | `push_messages` | `messages` | Insert | Supabase Edge Functions | `push` (POST) | `x-lobb-webhook-secret: <your-secret>` |
+| `push_arrivals` | `request_events` | Insert | Supabase Edge Functions | `push` (POST) | `x-lobb-webhook-secret: <your-secret>` |
 
 **d. Test it.** With the app fully closed on phone A, post a shout-out from phone B (same building). Phone A gets a banner; tapping it opens Shout-outs. Logs: **Edge Functions → push → Logs**. You can also send a test to a token from `push_tokens` at expo.dev/notifications.
 

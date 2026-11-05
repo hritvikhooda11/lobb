@@ -45,17 +45,18 @@ SECRET="$(cat "$SECRET_FILE")"
 npx --yes supabase secrets set PUSH_WEBHOOK_SECRET="$SECRET" --project-ref "$PROJECT_REF"
 npx --yes supabase functions deploy push --no-verify-jwt --project-ref "$PROJECT_REF"
 
-step "5/6  Three database webhooks (in the Supabase dashboard)"
+step "5/6  Four database webhooks (in the Supabase dashboard)"
 printf '%s' "$SECRET" | pbcopy
 echo "The webhook secret is now on your clipboard."
-echo "Opening Database → Webhooks. Create THREE hooks (enable webhooks first if it asks):"
+echo "Opening Database → Webhooks. Create FOUR hooks (enable webhooks first if it asks):"
 echo
 echo "  Name            Table       Events   Type                      Function     HTTP header"
 echo "  push_shoutouts  shoutouts   Insert   Supabase Edge Functions   push (POST)  x-lobb-webhook-secret: <paste>"
 echo "  push_requests   requests    Insert   Supabase Edge Functions   push (POST)  x-lobb-webhook-secret: <paste>"
 echo "  push_messages   messages    Insert   Supabase Edge Functions   push (POST)  x-lobb-webhook-secret: <paste>"
+echo "  push_arrivals   request_events  Insert   Supabase Edge Functions   push (POST)  x-lobb-webhook-secret: <paste>"
 open "https://supabase.com/dashboard/project/$PROJECT_REF/integrations/webhooks/webhooks" 2>/dev/null || true
-pause "Press Enter once all three webhooks are saved"
+pause "Press Enter once all four webhooks are saved"
 
 step "6/6  Development build for your iPhone (needs the \$99 Apple Developer account)"
 echo "When EAS asks: sign in with your Apple ID, say YES to push notifications / generating an APNs key,"

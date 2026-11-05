@@ -7,6 +7,7 @@ import { ActivityIndicator, View } from 'react-native';
 
 import { SellerAlerts } from '@/components/seller-alerts';
 import { MessageAlerts } from '@/components/message-alerts';
+import { OrderAlerts } from '@/components/order-alerts';
 import { ShoutoutAlerts } from '@/components/shoutout-alerts';
 import { SetupNeeded } from '@/components/setup-needed';
 import { supabaseConfigured } from '@/lib/supabase';
@@ -50,6 +51,7 @@ function RootStack() {
       {signedIn ? <SellerAlerts /> : null}
       {signedIn ? <ShoutoutAlerts /> : null}
       {signedIn ? <MessageAlerts /> : null}
+      {signedIn ? <OrderAlerts /> : null}
     </>
   );
 }

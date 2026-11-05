@@ -9,7 +9,7 @@ import { Button, Card, Icon, ItemBadge, ItemPhoto, Pill, Row, Screen, StateBadge
 import { communities } from '@/data/catalog';
 import { FULFILLMENT, money, type Fulfillment } from '@/data/pricing';
 import { attempt } from '@/lib/alert';
-import { DELIVERY_WINDOW_MS, LIVE_STATUSES, useItem, useNow, useStore, type RequestStatus } from '@/store/app-store';
+import { DELIVERY_WINDOW_MS, LIVE_STATUSES, ratingLabel, useItem, useNow, useStore, type RequestStatus } from '@/store/app-store';
 import { fonts, radius, space, useTheme } from '@/theme';
 
 const goHome = () => (router.canGoBack() ? router.back() : router.replace('/'));
@@ -91,7 +91,8 @@ export default function RequestStatusScreen() {
         {r.status === 'accepted' ? (
           <>
             <CountdownRing remainingMs={remaining} totalMs={DELIVERY_WINDOW_MS} caption={countdownCaption} />
-            <DelivererCard name={name} rating={r.deliverer?.rating ?? 5} rent={rent} fulfillment={f} />
+            <DelivererCard name={name} rating={ratingLabel(r.deliverer)} rent={rent} fulfillment={f} />
+            {f === 'lobby' ? <HereButton requestId={r.id} fulfillment={f} name={name} hereAt={r.buyerHereAt} now={now} /> : null}
             <WherePanel fulfillment={f} name={name} buyerRoom={r.buyerRoom} sellerRoom={r.sellerRoom} />
             {r.locationNote ? (
               <Txt variant="caption" tone="muted" center>
@@ -118,6 +119,7 @@ export default function RequestStatusScreen() {
             body={`${f === 'pickup' && r.sellerRoom ? `Head to Room ${r.sellerRoom}. ` : ''}${rent ? `Check it works, then let ${name} scan this. Your rental starts on scan.` : `Check the seal, then let ${name} scan this. Payment is released on scan.`}`}
           />
         ) : null}
+        {r.status === 'arriving' && f !== 'dropoff' ? <HereButton requestId={r.id} fulfillment={f} name={name} hereAt={r.buyerHereAt} now={now} /> : null}
 
         {r.status === 'renting' && r.returnBy ? (
           <>
@@ -206,7 +208,36 @@ function WherePanel({ fulfillment, name, buyerRoom, sellerRoom }: { fulfillment:
   );
 }
 
-function DelivererCard({ name, rating, rent, fulfillment }: { name: string; rating: number; rent: boolean; fulfillment: Fulfillment }) {
+/** Buyer: "I'm in the lobby" / "I'm at their door". Sends the seller a notification. */
+function HereButton({ requestId, fulfillment, name, hereAt, now }: { requestId: string; fulfillment: Fulfillment; name: string; hereAt?: number; now: number }) {
+  const { actions } = useStore();
+  const [busy, setBusy] = useState(false);
+  const recent = !!hereAt && now - hereAt < 60_000;
+  const label = fulfillment === 'lobby' ? 'I’m in the lobby' : 'I’m at their door';
+  return (
+    <View style={{ alignSelf: 'stretch', gap: 6 }}>
+      <Button
+        label={busy ? 'Letting them know…' : recent ? `${name} knows you’re here` : label}
+        icon={recent ? 'checkmark-circle' : fulfillment === 'lobby' ? 'people' : 'walk'}
+        kind={recent ? 'ghost' : 'accent'}
+        disabled={busy || recent}
+        onPress={async () => {
+          setBusy(true);
+          const ok = await attempt(() => actions.buyerHere(requestId));
+          setBusy(false);
+          if (ok) tap('success');
+        }}
+      />
+      {hereAt && !recent ? (
+        <Txt variant="caption" tone="muted" center>
+          Tap again to remind {name}.
+        </Txt>
+      ) : null}
+    </View>
+  );
+}
+
+function DelivererCard({ name, rating, rent, fulfillment }: { name: string; rating: string; rent: boolean; fulfillment: Fulfillment }) {
   const { colors } = useTheme();
   const status = rent
     ? 'grabbing it now'
@@ -222,7 +253,7 @@ function DelivererCard({ name, rating, rent, fulfillment }: { name: string; rati
         <View style={{ flex: 1 }}>
           <Txt variant="label">{name} accepted</Txt>
           <Txt variant="caption" tone="muted">
-            ★ {rating.toFixed(1)} · UW verified · {status}
+            {rating} · UW verified · {status}
           </Txt>
         </View>
       </Row>
@@ -275,15 +306,21 @@ function Done({ requestId, name, rated, title, subtitle }: { requestId: string; 
           <Pressable
             key={n}
             hitSlop={6}
-            onPress={() => {
+            onPress={async () => {
               tap();
+              const before = stars;
               setStars(n);
-              attempt(() => actions.rateRequest(requestId, n));
+              if (!(await attempt(() => actions.rateRequest(requestId, n)))) setStars(before);
             }}>
             <Icon name={n <= stars ? 'star' : 'star-outline'} size={36} color={n <= stars ? colors.warning : colors.textMuted} />
           </Pressable>
         ))}
       </Row>
+      {stars ? (
+        <Txt variant="caption" tone="muted">
+          Thanks! Tap a star to change it.
+        </Txt>
+      ) : null}
       <Button label="Done" onPress={goHome} style={{ alignSelf: 'stretch', marginTop: space.lg }} />
       <Pressable onPress={() => router.push('/report')} hitSlop={8}>
         <Txt variant="caption" tone="muted">

@@ -21,7 +21,7 @@ import { supabase } from '@/lib/supabase';
 export const systemNotificationsSupported = Platform.OS === 'ios' || Platform.OS === 'android';
 
 /** Events the server pushes (matches `kind` in public.push_messages). */
-export type PushKind = 'shoutout' | 'order' | 'message';
+export type PushKind = 'shoutout' | 'order' | 'message' | 'arrival';
 
 let pushToken: string | null = null;
 
