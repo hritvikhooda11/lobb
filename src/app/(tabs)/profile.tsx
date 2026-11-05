@@ -1,12 +1,11 @@
 import { router } from 'expo-router';
-import { useState } from 'react';
-import { Switch, TextInput, View } from 'react-native';
+import { Pressable, Switch, View } from 'react-native';
 
-import { Button, Card, Divider, Icon, Pill, Row, Screen, SectionHeader, Txt } from '@/components/ui';
+import { Button, Card, Divider, Icon, Pill, Row, Screen, SectionHeader, Txt, tap } from '@/components/ui';
 import { attempt, confirm } from '@/lib/alert';
 import { communities } from '@/data/catalog';
 import { useStore } from '@/store/app-store';
-import { radius, space, useTheme } from '@/theme';
+import { space, useTheme } from '@/theme';
 
 const DEMO_TOOLS = __DEV__ && process.env.EXPO_PUBLIC_DEMO_LOGIN === '1';
 
@@ -33,7 +32,7 @@ export default function Profile() {
         {user.isAdmin ? (
           <Pill icon="shield-checkmark" label="Lobb admin · verified seller" tone="accent" />
         ) : user.isSeller ? (
-          <Pill icon="storefront" label="Registered Lobb seller" tone="accent" />
+          <Pill icon="storefront" label="Wholesale seller" tone="accent" />
         ) : null}
       </View>
 
@@ -104,70 +103,23 @@ export default function Profile() {
   );
 }
 
-/** Registered sellers stock items in their room for Lobb. Others can join with a code from Lobb. */
+/** Wholesale sellers stock items in their room for Lobb: a small link to quick stock, or to enter a seller code. */
 function SellerSection() {
-  const { colors } = useTheme();
-  const { state, actions } = useStore();
-  const [code, setCode] = useState('');
-  const [busy, setBusy] = useState(false);
+  const { state } = useStore();
   const user = state.profile!;
   const stocked = state.listings.filter((l) => l.active && l.quantity > 0).reduce((n, l) => n + l.quantity, 0);
-
-  if (user.isSeller) {
-    return (
-      <>
-        <SectionHeader title="Your shelf" subtitle={stocked ? `${stocked} ${stocked === 1 ? 'item' : 'items'} in stock` : 'Nothing stocked yet'} />
-        <Card onPress={() => router.push('/stock')}>
-          <Row>
-            <Icon name="cube" size={24} tone="primary" />
-            <View style={{ flex: 1 }}>
-              <Txt variant="label">Quick stock</Txt>
-              <Txt variant="caption" tone="muted">
-                Update everything you have in one place
-              </Txt>
-            </View>
-            <Icon name="chevron-forward" size={18} tone="muted" />
-          </Row>
-        </Card>
-      </>
-    );
-  }
-
   return (
-    <>
-      <SectionHeader title="Sell with Lobb" subtitle="Stock items in your room and earn on every delivery" />
-      <Card style={{ gap: space.md }}>
-        <Txt variant="caption" tone="muted">
-          Got a seller code from Lobb? Enter it to become a registered seller.
-        </Txt>
-        <Row gap={space.sm}>
-          <TextInput
-            value={code}
-            onChangeText={(t) => setCode(t.toUpperCase())}
-            placeholder="SELLER CODE"
-            placeholderTextColor={colors.textMuted}
-            autoCapitalize="characters"
-            autoCorrect={false}
-            maxLength={32}
-            style={{ flex: 1, height: 46, borderRadius: radius.md, backgroundColor: colors.surfaceHigh, paddingHorizontal: space.md, color: colors.text, fontSize: 16, letterSpacing: 1 }}
-          />
-          <Button
-            label={busy ? '…' : 'Join'}
-            disabled={code.trim().length < 6 || busy}
-            onPress={async () => {
-              setBusy(true);
-              const ok = await attempt(() => actions.redeemSellerCode(code));
-              setBusy(false);
-              if (ok) {
-                setCode('');
-                router.push('/stock');
-              }
-            }}
-            style={{ height: 46, paddingHorizontal: space.lg }}
-          />
-        </Row>
-      </Card>
-    </>
+    <Pressable
+      onPress={() => {
+        tap();
+        router.push(user.isSeller ? '/stock' : '/seller-code');
+      }}
+      style={({ pressed }) => ({ flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'center', marginTop: space.lg, paddingVertical: 6, paddingHorizontal: 12, opacity: pressed ? 0.6 : 1 })}>
+      <Icon name={user.isSeller ? 'cube-outline' : 'storefront-outline'} size={16} tone="primary" />
+      <Txt variant="label" tone="primary">
+        {user.isSeller ? `Quick stock${stocked ? ` · ${stocked} in stock` : ''}` : 'Wholesale seller? Enter your code'}
+      </Txt>
+    </Pressable>
   );
 }
 

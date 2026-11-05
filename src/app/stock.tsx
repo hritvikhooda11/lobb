@@ -41,7 +41,7 @@ export default function Stock() {
     return (
       <View style={{ flex: 1, backgroundColor: colors.bg, padding: space.xl, paddingTop: insets.top + space.xl, gap: space.lg }}>
         <Txt variant="title">Quick stock</Txt>
-        <Txt tone="muted">Quick stock is for registered Lobb sellers. Add your seller code on your profile.</Txt>
+        <Txt tone="muted">Quick stock is for Lobb wholesale sellers. Enter your seller code on your Account page.</Txt>
         <Button label="Back" kind="ghost" onPress={() => router.back()} />
       </View>
     );

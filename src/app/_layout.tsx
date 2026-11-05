@@ -43,6 +43,7 @@ function RootStack() {
           <Stack.Screen name="shoutouts" options={{ presentation: 'modal' }} />
           <Stack.Screen name="shoutout-new" options={{ presentation: 'modal' }} />
           <Stack.Screen name="stock" options={{ presentation: 'modal' }} />
+          <Stack.Screen name="seller-code" options={{ presentation: 'formSheet', sheetAllowedDetents: [0.5], sheetGrabberVisible: true, sheetCornerRadius: 28 }} />
           <Stack.Screen name="chat" />
         </Stack.Protected>
       </Stack>

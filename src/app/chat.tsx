@@ -10,7 +10,8 @@ import { supabase } from '@/lib/supabase';
 import { useItem, useStore } from '@/store/app-store';
 import { fonts, radius, space, useTheme } from '@/theme';
 
-const QUICK_REPLIES = ['On my way!', 'I’m in the lobby', 'Which room?', 'Be there in 2 min', 'Thanks!'];
+const ORDER_REPLIES = ['On my way!', 'I’m in the lobby', 'Which room?', 'Be there in 2 min', 'Thanks!'];
+const SHOUTOUT_REPLIES = ['Is any brand OK?', 'What size?', 'I have one!', 'Thanks!'];
 
 /**
  * One chat thread. `?request=<id>` for an order (buyer ↔ neighbor delivering), or
@@ -111,7 +112,7 @@ export default function Chat() {
         <View style={{ paddingHorizontal: space.md, paddingTop: space.sm, paddingBottom: insets.bottom + space.sm, borderTopWidth: 1, borderTopColor: colors.border, backgroundColor: colors.surface, gap: space.sm }}>
           {messages.length < 2 ? (
             <Row gap={space.sm} style={{ flexWrap: 'wrap' }}>
-              {QUICK_REPLIES.map((q) => (
+              {(shoutout ? SHOUTOUT_REPLIES : ORDER_REPLIES).map((q) => (
                 <Pressable key={q} onPress={() => void submit(q)} style={{ paddingHorizontal: 12, height: 32, borderRadius: radius.pill, justifyContent: 'center', backgroundColor: colors.primarySoft }}>
                   <Txt variant="caption" tone="primary" style={{ fontWeight: '600' }}>
                     {q}
@@ -131,6 +132,8 @@ export default function Chat() {
               style={{ flex: 1, minHeight: 42, maxHeight: 120, borderRadius: 21, backgroundColor: colors.surfaceHigh, paddingHorizontal: space.lg, paddingTop: 11, paddingBottom: 11, color: colors.text, fontSize: 16 }}
             />
             <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Send"
               onPress={() => void submit(draft)}
               disabled={!draft.trim()}
               style={{ width: 42, height: 42, borderRadius: 21, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.primary, opacity: draft.trim() ? 1 : 0.4 }}>
