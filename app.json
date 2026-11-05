@@ -67,6 +67,12 @@
       "typedRoutes": true,
       "reactCompiler": true
     },
-    "backgroundColor": "#0D0A14"
+    "backgroundColor": "#0D0A14",
+    "owner": "hritvik11",
+    "extra": {
+      "eas": {
+        "projectId": "f490bc55-e634-4f8a-b35a-740375499dff"
+      }
+    }
   }
 }
