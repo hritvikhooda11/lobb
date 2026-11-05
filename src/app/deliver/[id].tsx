@@ -1,13 +1,15 @@
 import { Image } from 'expo-image';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
-import { Pressable, View } from 'react-native';
+import { ActivityIndicator, Pressable, View } from 'react-native';
 
+import { ChatButton } from '@/components/chat-button';
 import { BarcodeScanner } from '@/components/barcode-scanner';
 import { CountdownRing } from '@/components/live';
 import { Button, Card, Icon, ItemBadge, Pill, Row, Screen, StateBadge, Txt, tap, type IconName } from '@/components/ui';
 import { FULFILLMENT, money } from '@/data/pricing';
 import { attempt, showError } from '@/lib/alert';
+import { identifyPhoto, matchesItem } from '@/lib/identify';
 import { takePhoto, type Photo } from '@/lib/photo';
 import { DELIVERY_WINDOW_MS, useItem, useNow, useStore, type Job } from '@/store/app-store';
 import { fonts, space, useTheme } from '@/theme';
@@ -59,7 +61,12 @@ export default function Deliver() {
             ‹ Home
           </Txt>
         </Pressable>
-        <Pill label={`You get ${money(job.earnings)}`} tone="success" />
+        <Row gap={space.sm}>
+          {job.status !== 'incoming' && job.status !== 'closed' && job.status !== 'returned' ? (
+            <ChatButton thread={{ requestId: job.id }} label={`Message ${job.buyerName.split(' ')[0]}`} />
+          ) : null}
+          <Pill label={`You get ${money(job.earnings)}`} tone="success" />
+        </Row>
       </Row>
 
       <Row style={{ marginTop: space.lg }}>
@@ -141,17 +148,66 @@ function AcceptPrompt({ job }: { job: Job }) {
 }
 
 function SealCheck({ jobId, barcode }: { jobId: string; barcode?: string }) {
-  const { actions } = useStore();
+  const { state, actions } = useStore();
+  const item = useItem(state.jobs.find((j) => j.id === jobId)?.itemId);
   const [scanned, setScanned] = useState(!barcode);
+  const [checkedBy, setCheckedBy] = useState<'barcode' | 'photo' | null>(null);
   const [scannerOpen, setScannerOpen] = useState(false);
+  const [checking, setChecking] = useState(false);
   const [photo, setPhoto] = useState<Photo | null>(null);
   const [busy, setBusy] = useState(false);
+
+  /** Barcode won't scan: snap the label and let Lobb confirm it's the same product. */
+  async function checkWithPhoto() {
+    if (scannerOpen) {
+      setScannerOpen(false);
+      // Let the scanner finish closing before the camera opens (iOS won't stack them).
+      await new Promise((r) => setTimeout(r, 600));
+    }
+    const p = await takePhoto({ base64: true });
+    if (!p?.base64 || !item) return;
+    setChecking(true);
+    try {
+      const found = await identifyPhoto(p.base64);
+      const match = matchesItem(found, item);
+      if (match === 'no') {
+        showError(`That looks like ${found.name}, not ${item.name}. Bring the item they asked for.`, 'Wrong item');
+        return;
+      }
+      tap('success');
+      setScanned(true);
+      setCheckedBy('photo');
+      // The label photo also works as the seal photo if they haven't taken one.
+      setPhoto((prev) => prev ?? p);
+    } catch (e) {
+      showError(`${e instanceof Error ? e.message : 'Couldn’t check the photo.'} Try a clearer photo of the label, or scan the barcode.`, 'Couldn’t check it');
+    } finally {
+      setChecking(false);
+    }
+  }
+
   return (
     <View style={{ marginTop: space.xl, gap: space.md }}>
       <Txt variant="title">Verify the seal</Txt>
       <Txt tone="muted">Required before every delivery. Keeps everyone safe.</Txt>
       {barcode ? (
-        <StepCard done={scanned} icon="barcode-outline" label="1. Scan the barcode" doneLabel="Barcode matches" onPress={() => setScannerOpen(true)} />
+        <>
+          <StepCard
+            done={scanned}
+            icon="barcode-outline"
+            label="1. Scan the barcode"
+            doneLabel={checkedBy === 'photo' ? 'Photo matches the item' : 'Barcode matches'}
+            onPress={() => setScannerOpen(true)}
+          />
+          {!scanned ? (
+            <Pressable onPress={checkWithPhoto} disabled={checking} hitSlop={8} style={{ flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'center' }}>
+              {checking ? <ActivityIndicator size="small" /> : <Icon name="camera-outline" size={16} tone="primary" />}
+              <Txt variant="label" tone="primary">
+                {checking ? 'Checking your photo…' : 'Won’t scan? Check it with a photo'}
+              </Txt>
+            </Pressable>
+          ) : null}
+        </>
       ) : (
         <Txt variant="caption" tone="muted">
           This item has no barcode on file, so just snap the seal.
@@ -174,11 +230,13 @@ function SealCheck({ jobId, barcode }: { jobId: string; barcode?: string }) {
         visible={scannerOpen}
         busy={false}
         onClose={() => setScannerOpen(false)}
+        onPhotoInstead={checkWithPhoto}
         onScanned={(code) => {
           setScannerOpen(false);
           if (barcode && sameBarcode(code, barcode)) {
             tap('success');
             setScanned(true);
+            setCheckedBy('barcode');
           } else {
             showError('That barcode doesn’t match the item they asked for.', 'Wrong item');
           }

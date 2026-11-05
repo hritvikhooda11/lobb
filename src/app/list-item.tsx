@@ -14,6 +14,7 @@ import { canRent, categories, findByBarcode, findDuplicate, getCategory, type Ca
 import { bannedReason } from '@/data/rules';
 import { checkPrice, MAX_ADJUST_PCT, money, PRICE_MAX_PCT, PRICE_WARN_PCT, rentPerDay, sellerEarnings } from '@/data/pricing';
 import { attempt, confirm, showError } from '@/lib/alert';
+import { identifyPhoto } from '@/lib/identify';
 import { takePhoto, type Photo } from '@/lib/photo';
 import { supabase } from '@/lib/supabase';
 import { useStore } from '@/store/app-store';
@@ -26,7 +27,10 @@ export default function ListItem() {
 
   const [kind, setKind] = useState<ItemKind>('buy');
   const [name, setName] = useState('');
+  /** The seller's own photo of the actual item (always required, uploaded with the listing). */
   const [photo, setPhoto] = useState<Photo | null>(null);
+  /** The product database's picture, when we found the product. Shown in the store next to the real photo. */
+  const [catalogImage, setCatalogImage] = useState<string | null>(null);
   const [category, setCategory] = useState<CategoryId | null>(null);
   const [sealed, setSealed] = useState(false);
   const [pricing, setPricing] = useState<'idle' | 'loading'>('idle');
@@ -49,7 +53,7 @@ export default function ListItem() {
   // Alcohol: only Lobb admins can sell it.
   const allowedCategories = categories.filter((c) => (kind === 'rent' ? canRent(c.id) : !c.ageRestricted || state.profile?.isAdmin));
   const needsSealCheck = kind === 'buy' && category !== null;
-  const ready = name.trim().length >= 2 && photo && category && (!needsSealCheck || sealed);
+  const ready = name.trim().length >= 2 && photo?.base64 && category && (!needsSealCheck || sealed);
 
   const resetQuote = () => {
     setQuote(null);
@@ -64,14 +68,14 @@ export default function ListItem() {
       // A miss shouldn't leave the previous scan's product filled in.
       if (!result.found && scan?.found) {
         setName('');
-        setPhoto(null);
+        setCatalogImage(null);
         setCategory(null);
       }
       setScan(result);
       resetQuote();
       if (result.found) {
         setName(result.name);
-        if (result.imageUrl) setPhoto({ uri: result.imageUrl });
+        setCatalogImage(result.imageUrl ?? null);
         if (result.category && (kind === 'buy' || canRent(result.category))) setCategory(result.category);
       }
     } catch {
@@ -93,24 +97,12 @@ export default function ListItem() {
     if (!p?.base64) return;
     setIdentifying(true);
     try {
-      const { data } = await supabase.auth.getSession();
-      const res = await fetch('/api/identify', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${data.session?.access_token ?? ''}` },
-        body: JSON.stringify({ imageBase64: p.base64 }),
-      });
-      const body = (await res.json().catch(() => ({}))) as IdentifyResponse & { error?: string };
-      if (!res.ok || !body.identified) {
-        setPhoto(p);
-        resetQuote();
-        showError(body.error ?? (body.identified === false ? body.reason : 'Couldn’t identify it.'), 'Type it in instead');
-        nameInput.current?.focus();
-        return;
-      }
-      setCandidate({ ...body, photo: p });
-    } catch {
+      setCandidate({ ...(await identifyPhoto(p.base64)), photo: p });
+    } catch (e) {
       setPhoto(p);
-      showError('Couldn’t reach Lobb to identify the photo. Type the name instead.');
+      resetQuote();
+      showError(e instanceof Error ? e.message : 'Couldn’t identify it.', 'Type it in instead');
+      nameInput.current?.focus();
     } finally {
       setIdentifying(false);
     }
@@ -121,6 +113,7 @@ export default function ListItem() {
     tap('success');
     setName([candidate.name, candidate.size].filter(Boolean).join(', '));
     setPhoto(candidate.photo);
+    setCatalogImage(candidate.imageUrl);
     if (candidate.category && (kind === 'buy' || canRent(candidate.category))) setCategory(candidate.category);
     setScan(
       candidate.barcode
@@ -134,6 +127,7 @@ export default function ListItem() {
   function rejectCandidate() {
     if (!candidate) return;
     setPhoto(candidate.photo);
+    setCatalogImage(null);
     setName('');
     setScan(null);
     resetQuote();
@@ -155,7 +149,7 @@ export default function ListItem() {
           kind,
           barcode: scan?.barcode,
           imageBase64: photo?.base64 ?? undefined,
-          imageUrl: !photo?.base64 && photo?.uri.startsWith('https://') ? photo.uri : undefined,
+          imageUrl: catalogImage ?? undefined,
         }),
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -190,7 +184,7 @@ export default function ListItem() {
     }
     setPricing('loading');
     const ok = await attempt(() =>
-      actions.createItem({ quoteId: quote.quoteId!, size: quote.size || (scan?.found ? scan.size : ''), barcode: scan?.barcode, photo, price: customPrice ?? undefined }),
+      actions.createItem({ quoteId: quote.quoteId!, size: quote.size || (scan?.found ? scan.size : ''), barcode: scan?.barcode, photo, catalogImage, price: customPrice ?? undefined }),
     );
     setPricing('idle');
     if (!ok) return;
@@ -318,7 +312,14 @@ export default function ListItem() {
       ) : (
         <>
           <View style={{ gap: space.sm }}>
-            <Txt variant="label">Photo</Txt>
+            <Row style={{ justifyContent: 'space-between' }}>
+              <Txt variant="label">Your photo of the item</Txt>
+              {catalogImage ? (
+                <Txt variant="caption" tone="muted">
+                  Shown next to the store picture
+                </Txt>
+              ) : null}
+            </Row>
             <Pressable
               onPress={async () => {
                 const p = await takePhoto({ base64: true });
@@ -330,6 +331,16 @@ export default function ListItem() {
               style={{ height: 180, borderRadius: radius.lg, borderWidth: 1.5, borderStyle: photo ? 'solid' : 'dashed', borderColor: photo ? colors.border : colors.primary, backgroundColor: colors.surface, overflow: 'hidden', alignItems: 'center', justifyContent: 'center' }}>
               {photo ? (
                 <Image source={{ uri: photo.uri }} style={{ width: '100%', height: '100%' }} contentFit="cover" />
+              ) : catalogImage ? (
+                <View style={{ alignItems: 'center', gap: 6, paddingHorizontal: space.lg }}>
+                  <Image source={{ uri: catalogImage }} style={{ width: 64, height: 64, borderRadius: radius.sm, backgroundColor: '#fff' }} contentFit="contain" />
+                  <Txt variant="label" tone="primary">
+                    Now snap the real one
+                  </Txt>
+                  <Txt variant="caption" tone="muted" center>
+                    Neighbors see your photo next to the store picture
+                  </Txt>
+                </View>
               ) : (
                 <View style={{ alignItems: 'center', gap: 6 }}>
                   <Icon name="camera" size={36} tone="primary" />

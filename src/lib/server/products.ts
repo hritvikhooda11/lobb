@@ -10,6 +10,10 @@
  * Prices are combined by `consensus()`, which drops stale offers and outliers (wrong pack sizes,
  * marketplace sellers), so one bad listing can't swing the Lobb price.
  */
+import { overlap } from '@/lib/text-match';
+
+export { overlap };
+
 export type Offer = { store: string; priceCents: number; url?: string; title?: string; updatedAt?: number; source: 'kroger' | 'upcitemdb' | 'web' };
 export type ProductMatch = { title: string; brand: string; upc: string | null; imageUrl: string | null; category: string; offers: Offer[] };
 
@@ -21,21 +25,6 @@ async function cached<T>(key: string, ttlMs: number, fn: () => Promise<T>): Prom
   const value = await fn();
   cache.set(key, { at: Date.now(), value });
   return value;
-}
-
-const tokens = (s: string) =>
-  s
-    .toLowerCase()
-    .replace(/[’']/g, '')
-    .split(/[^a-z0-9]+/)
-    .filter((t) => t.length > 1 && !['the', 'and', 'with', 'for', 'oz', 'fl', 'ct', 'pack', 'count'].includes(t));
-
-/** Share of the words in `wanted` that appear in `candidate` (0–1). Guards name searches against wrong matches. */
-export function overlap(wanted: string, candidate: string) {
-  const w = tokens(wanted);
-  if (!w.length) return 0;
-  const c = new Set(tokens(candidate));
-  return w.filter((t) => c.has(t) || [...c].some((x) => x.startsWith(t) || t.startsWith(x))).length / w.length;
 }
 
 // ── UPCitemdb ───────────────────────────────────────────────────────────────

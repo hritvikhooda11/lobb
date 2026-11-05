@@ -29,7 +29,7 @@ const PROMOS: Record<ItemKind, Promo[]> = {
   buy: [
     { id: 'late-night', title: 'Late-night cravings', subtitle: 'Snacks from down the hall, in minutes', cta: 'Shop snacks', itemId: 'hot-cheetos', colors: ['#6D3CF0', '#2A1A55'], category: 'snacks' },
     { id: 'exam-fuel', title: 'Exam-week fuel', subtitle: 'Red Bull, Celsius and more, delivered', cta: 'Shop drinks', itemId: 'redbull-8', colors: ['#0E7C86', '#0B3B4A'], category: 'drinks' },
-    { id: 'ramen', title: 'Ramen o’clock', subtitle: 'Shin, Cup Noodles and Easy Mac', cta: 'Shop instant', itemId: 'shin-ramyun', colors: ['#E8384F', '#7A1230'], category: 'instant' },
+    { id: 'ramen', title: 'Ramen o’clock', subtitle: 'Shin, Cup Noodles and Easy Mac', cta: 'Shop food', itemId: 'shin-ramyun', colors: ['#E8384F', '#7A1230'], category: 'snacks' },
   ],
   rent: [
     { id: 'midterms', title: 'Midterm tomorrow?', subtitle: 'Borrow a TI-84 from a neighbor tonight', cta: 'Borrow tech', itemId: 'ti84', colors: ['#6D3CF0', '#2A1A55'], category: 'electronics' },
@@ -125,9 +125,9 @@ export function ItemCard({ item, width = 156 }: { item: Item; width?: number | `
         openItem(item);
       }}
       style={({ pressed }) => [{ width, transform: [{ scale: pressed ? 0.97 : 1 }] }]}>
-      <View style={[{ height: 132, borderRadius: radius.md, backgroundColor: '#fff', overflow: 'hidden' }, elevation]}>
+      <View style={[{ height: 132, borderRadius: radius.md, backgroundColor: item.imageFit === 'cover' ? categoryTint[item.category] + '2E' : '#fff', overflow: 'hidden' }, item.imageFit === 'cover' ? null : elevation]}>
         {item.image ? (
-          <Image source={item.image} style={{ width: '100%', height: '100%' }} contentFit="contain" transition={150} />
+          <Image source={item.image} style={{ width: '100%', height: '100%' }} contentFit={item.imageFit ?? 'contain'} transition={150} />
         ) : (
           <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: categoryTint[item.category] + '2E' }}>
             <Icon name={categoryIcon[item.category]} size={44} color={categoryTint[item.category]} />

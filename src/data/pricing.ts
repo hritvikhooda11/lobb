@@ -6,9 +6,17 @@
  */
 import type { Item } from './catalog';
 
-const DELIVERER_MIN = 75;
-const DELIVERER_RATE = 0.2;
-const PLATFORM_FEE = 25;
+/**
+ * Convenience pricing (mirrors SQL buy_price): the delivering neighbor earns 30% of the item price
+ * (at least $1.50) on top of being paid back for the item, and Lobb keeps 10% (at least 50¢).
+ * A $10 item costs $14 with a lobby meetup.
+ */
+const DELIVERER_MIN = 150;
+const DELIVERER_RATE = 0.3;
+const PLATFORM_MIN = 50;
+const PLATFORM_RATE = 0.1;
+/** Flat Lobb fee on rentals (SQL create_request). */
+const RENT_PLATFORM_FEE = 25;
 
 export const MAX_ADJUST_PCT = 5;
 
@@ -47,9 +55,10 @@ export type PriceBreakdown = {
 export function priceFor(item: Item, adjustPct = 0, f: Fulfillment = 'lobby'): PriceBreakdown {
   const itemPrice = round5(item.marketPrice * (1 + clampAdjust(adjustPct) / 100));
   const deliverer = Math.max(DELIVERER_MIN, round5(itemPrice * DELIVERER_RATE));
-  const base = itemPrice + deliverer + PLATFORM_FEE;
+  const platform = Math.max(PLATFORM_MIN, round5(itemPrice * PLATFORM_RATE));
+  const base = itemPrice + deliverer + platform;
   const fulfillment = fulfillmentAdjust(base, f);
-  return { item: itemPrice, deliverer, platform: PLATFORM_FEE, fulfillment, total: base + fulfillment };
+  return { item: itemPrice, deliverer, platform, fulfillment, total: base + fulfillment };
 }
 
 /** What a seller receives: reimbursed for the item plus the delivery cut (and the option's difference). */
@@ -68,9 +77,9 @@ export const rentalDurations: RentalDuration[] = [
   { id: '3d', label: '3 days', hours: 72, dayMultiplier: 2.5 },
 ];
 
-/** Daily rate: ~6% of retail, at least $1. */
+/** Daily rate: 10% of retail, at least $1.50 (mirrors SQL rent_per_day). */
 export function rentPerDay(item: Item, adjustPct = 0) {
-  return Math.max(100, round5(item.marketPrice * 0.06 * (1 + clampAdjust(adjustPct) / 100)));
+  return Math.max(150, round5(item.marketPrice * 0.1 * (1 + clampAdjust(adjustPct) / 100)));
 }
 
 export type RentalBreakdown = {
@@ -84,16 +93,15 @@ export type RentalBreakdown = {
 
 export function rentalPriceFor(item: Item, duration: RentalDuration, adjustPct = 0, f: Fulfillment = 'lobby'): RentalBreakdown {
   const rent = Math.max(100, round5(rentPerDay(item, adjustPct) * duration.dayMultiplier));
-  const base = rent + PLATFORM_FEE;
+  const base = rent + RENT_PLATFORM_FEE;
   const fulfillment = fulfillmentAdjust(base, f);
-  return { rent, platform: PLATFORM_FEE, fulfillment, total: base + fulfillment, hold: item.marketPrice };
+  return { rent, platform: RENT_PLATFORM_FEE, fulfillment, total: base + fulfillment, hold: item.marketPrice };
 }
 
 /** Rough offline estimate by category, used when the AI price lookup is unavailable. */
 export const fallbackRetailPrice: Record<Item['category'], number> = {
   snacks: 199,
   drinks: 179,
-  instant: 159,
   toiletries: 399,
   electronics: 1499,
   household: 999,
@@ -118,9 +126,15 @@ export function checkPrice(price: number, lobbPrice: number): PriceCheck {
 
 // ── Shout-outs ─────────────────────────────────────────────────────────────
 
-/** The poster names an all-in price; Lobb keeps its usual fee and the neighbor gets the rest. */
+/** The poster names an all-in price; Lobb keeps 10% (at least 50¢) and the neighbor gets the rest. */
 export const SHOUTOUT_MIN = 100;
 export const SHOUTOUT_MAX = 5000;
-export const shoutoutPayout = (offer: number) => offer - PLATFORM_FEE;
+/** Mirrors SQL shoutout_fee. */
+export const shoutoutFee = (offer: number) => Math.max(50, round5(offer * 0.1));
+/** Optional rush tip on top of the offer. All of it goes to the neighbor who brings it. */
+export const RUSH_TIPS = [0, 200, 500] as const;
+export type RushTip = (typeof RUSH_TIPS)[number];
+/** What the neighbor who brings it earns. */
+export const shoutoutPayout = (offer: number, boost = 0) => offer - shoutoutFee(offer) + boost;
 
 export const money = (cents: number) => `$${(cents / 100).toFixed(2)}`;

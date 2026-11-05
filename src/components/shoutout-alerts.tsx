@@ -13,15 +13,15 @@ import { Animated, Pressable, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Icon, Txt } from '@/components/ui';
-import { money } from '@/data/pricing';
-import { notify, onNotificationTap, registerForRemotePush, systemNotificationsSupported, type PushKind } from '@/lib/notify';
+import { money, shoutoutPayout } from '@/data/pricing';
+import { ensureNotificationPermission, notify, onNotificationTap, registerForRemotePush, systemNotificationsSupported, type PushKind } from '@/lib/notify';
 import { useStore, type Shoutout } from '@/store/app-store';
 import { radius, space, useTheme } from '@/theme';
 
 type Toast = { title: string; body: string; url: string; pushedAs?: PushKind };
 
 const pitch = (s: Shoutout) =>
-  s.kind === 'rent' ? `${s.posterName} will pay ${money(s.offer)} to borrow one. Have it?` : `${s.posterName} will pay ${money(s.offer)}. Have one?`;
+  `${s.posterName} pays you ${money(shoutoutPayout(s.offer, s.boost))}${s.kind === 'rent' ? ' to borrow one. Have it?' : '. Have one?'}`;
 
 export function ShoutoutAlerts() {
   const { state } = useStore();
@@ -31,11 +31,9 @@ export function ShoutoutAlerts() {
   const [toast, setToast] = useState<Toast | null>(null);
   const slide = useRef(new Animated.Value(0)).current;
 
-  function show(t: Toast) {
-    if (systemNotificationsSupported) {
-      void notify(t.title, t.body, t.url, t.pushedAs);
-      return;
-    }
+  async function show(t: Toast) {
+    // Phone notification when allowed; otherwise (web, or permission not given) an in-app banner.
+    if (systemNotificationsSupported && (await notify(t.title, t.body, t.url, t.pushedAs))) return;
     setToast(t);
     slide.setValue(0);
     Animated.sequence([
@@ -52,7 +50,9 @@ export function ShoutoutAlerts() {
   // (dev build / TestFlight). In Expo Go this falls back to local notifications.
   useEffect(() => {
     seen.current = null;
-    if (state.userId) void registerForRemotePush();
+    if (!state.userId) return;
+    // Expo Go / Simulator can't use remote push, but local notifications still need permission.
+    void registerForRemotePush().then((remote) => (remote ? true : ensureNotificationPermission())).catch(() => {});
   }, [state.userId]);
 
   useEffect(() => {
@@ -67,10 +67,10 @@ export function ShoutoutAlerts() {
       const before = previous.get(s.id);
       previous.set(s.id, s.status);
       if (!s.mine && before === undefined && s.status === 'open' && state.profile?.notifyShoutouts) {
-        show({ title: `📣 ${s.text}?`, body: pitch(s), url: '/shoutouts', pushedAs: 'shoutout' });
+        void show({ title: `${s.boost ? '🔥 RUSH: ' : '📣 '}${s.text}?`, body: pitch(s), url: '/shoutouts', pushedAs: 'shoutout' });
       }
       if (s.mine && before === 'open' && s.status === 'claimed') {
-        show({ title: `🎉 A neighbor has your ${s.text}`, body: 'They’re on it. Tap to track it.', url: s.requestId ? `/request/${s.requestId}` : '/shoutouts' });
+        void show({ title: `🎉 A neighbor has your ${s.text}`, body: 'They’re on it. Tap to track it.', url: s.requestId ? `/request/${s.requestId}` : '/shoutouts' });
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps

@@ -14,8 +14,8 @@ import { useColorScheme } from 'react-native';
 const palette = {
   violet50: '#F3EEFF',
   violet300: '#B69CFF',
-  violet500: '#8B5CF6',
-  violet600: '#6D3CF0',
+  violet500: '#9B6BFF',
+  violet600: '#7444FF',
   violet900: '#2A1A55',
   lime400: '#C8FF3D',
   lime600: '#8BC400',
@@ -25,15 +25,15 @@ const palette = {
   amber600: '#D98E00',
   mint400: '#3DDC97',
   mint600: '#12A86B',
-  ink950: '#0D0A14',
-  ink900: '#17121F',
-  ink800: '#221B2E',
-  ink700: '#2E2640',
-  ink400: '#A79FBD',
+  ink950: '#16111F',
+  ink900: '#221B30',
+  ink800: '#2E2541',
+  ink700: '#3D3354',
+  ink400: '#BDB4D6',
   paper50: '#F6F5FA',
   paper100: '#F1EDFA',
   paper200: '#E4DEF2',
-  paper600: '#6B6383',
+  paper600: '#5F5778',
   paper950: '#150F22',
 };
 
@@ -45,10 +45,10 @@ export const darkColors = {
   text: '#F5F2FF',
   textMuted: palette.ink400,
   primary: palette.violet500,
-  primarySoft: 'rgba(139, 92, 246, 0.18)',
+  primarySoft: 'rgba(155, 107, 255, 0.24)',
   onPrimary: '#FFFFFF',
   accent: palette.lime400,
-  accentSoft: 'rgba(200, 255, 61, 0.14)',
+  accentSoft: 'rgba(200, 255, 61, 0.18)',
   onAccent: palette.ink950,
   danger: palette.coral400,
   dangerSoft: 'rgba(255, 93, 115, 0.16)',
@@ -56,7 +56,7 @@ export const darkColors = {
   warningSoft: 'rgba(255, 197, 61, 0.16)',
   success: palette.mint400,
   successSoft: 'rgba(61, 220, 151, 0.16)',
-  glow: 'rgba(139, 92, 246, 0.45)',
+  glow: 'rgba(155, 107, 255, 0.55)',
 };
 
 export type ThemeColors = typeof darkColors;
@@ -90,7 +90,6 @@ export const categoryTint = {
   toiletries: '#FF7AC6',
   electronics: '#8B5CF6',
   household: '#3DDC97',
-  instant: '#FF8A4C',
   alcohol: '#E8566C',
 } as const;
 

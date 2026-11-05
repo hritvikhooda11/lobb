@@ -20,7 +20,6 @@ export function Icon({ name, size = 20, tone = 'default', color }: { name: IconN
 export const categoryIcon: Record<CategoryId, IconName> = {
   snacks: 'fast-food',
   drinks: 'water',
-  instant: 'restaurant',
   toiletries: 'sparkles',
   electronics: 'battery-charging',
   household: 'home',
@@ -180,9 +179,10 @@ export function ItemBadge({ item, size = 56 }: { item: Item; size?: number }) {
   const tint = categoryTint[item.category];
   const box = { width: size, height: size, borderRadius: size * 0.28 };
   if (item.image) {
+    const fit = item.imageFit ?? 'contain';
     return (
-      <View style={[box, { backgroundColor: '#fff', overflow: 'hidden' }]}>
-        <Image source={item.image} style={{ width: '100%', height: '100%' }} contentFit="contain" transition={150} />
+      <View style={[box, { backgroundColor: fit === 'contain' ? '#fff' : tint + '2E', overflow: 'hidden' }]}>
+        <Image source={item.image} style={{ width: '100%', height: '100%' }} contentFit={fit} transition={150} />
       </View>
     );
   }
@@ -197,9 +197,9 @@ export function ItemBadge({ item, size = 56 }: { item: Item; size?: number }) {
 export function ItemPhoto({ item, height = 120, radius: r = radius.md }: { item: Item; height?: number; radius?: number }) {
   const tint = categoryTint[item.category];
   return (
-    <View style={{ height, alignSelf: 'stretch', borderRadius: r, overflow: 'hidden', backgroundColor: item.image ? '#fff' : tint + '2E', alignItems: 'center', justifyContent: 'center' }}>
+    <View style={{ height, alignSelf: 'stretch', borderRadius: r, overflow: 'hidden', backgroundColor: item.image && item.imageFit !== 'cover' ? '#fff' : tint + '2E', alignItems: 'center', justifyContent: 'center' }}>
       {item.image ? (
-        <Image source={item.image} style={{ width: '100%', height: '100%' }} contentFit="contain" transition={150} />
+        <Image source={item.image} style={{ width: '100%', height: '100%' }} contentFit={item.imageFit ?? 'contain'} transition={150} />
       ) : (
         <Ionicons name={categoryIcon[item.category]} size={height * 0.4} color={tint} />
       )}

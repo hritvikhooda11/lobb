@@ -4,10 +4,11 @@ import { Pressable, ScrollView, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Button, Card, categoryIcon, Icon, Pill, Row, StateBadge, Txt, tap } from '@/components/ui';
+import { chatHref, useShoutoutThreads } from '@/lib/chat';
 import { FULFILLMENT, money, shoutoutPayout } from '@/data/pricing';
 import { attempt, confirm } from '@/lib/alert';
 import { LIVE_STATUSES, useNow, useStore, type Shoutout } from '@/store/app-store';
-import { categoryTint, space, useTheme } from '@/theme';
+import { categoryTint, radius, space, useTheme } from '@/theme';
 
 /** Shout-outs in your building: say "I have one" to earn, or see your own. */
 export default function Shoutouts() {
@@ -15,7 +16,8 @@ export default function Shoutouts() {
   const insets = useSafeAreaInsets();
   const { state } = useStore();
   const now = useNow();
-  const open = state.shoutouts.filter((s) => !s.mine && s.status === 'open' && s.expiresAt > now);
+  // Rush shout-outs first, then newest.
+  const open = state.shoutouts.filter((s) => !s.mine && s.status === 'open' && s.expiresAt > now).sort((a, b) => b.boost - a.boost || b.createdAt - a.createdAt);
   const mine = state.shoutouts.filter((s) => s.mine && (s.status !== 'open' || s.expiresAt > now)).slice(0, 5);
   const delivering = state.jobs.some((j) => ['accepted', 'verified', 'arrived'].includes(j.status));
 
@@ -87,10 +89,11 @@ function Header({ s }: { s: Shoutout }) {
 
 function OpenShoutout({ shoutout: s, blocked, now }: { shoutout: Shoutout; blocked: boolean; now: number }) {
   const { colors } = useTheme();
-  const { actions } = useStore();
+  const { state, actions } = useStore();
   const [busy, setBusy] = useState(false);
   return (
-    <Card style={{ gap: space.md }}>
+    <Card style={[{ gap: space.md }, s.boost ? { borderWidth: 1.5, borderColor: colors.warning } : null]}>
+      {s.boost ? <Pill icon="flame" label={`RUSH · +${money(s.boost)} TIP`} tone="warning" /> : null}
       <Header s={s} />
       {s.note ? <Txt variant="caption">“{s.note}”</Txt> : null}
       <Row style={{ justifyContent: 'space-between' }}>
@@ -98,13 +101,25 @@ function OpenShoutout({ shoutout: s, blocked, now }: { shoutout: Shoutout; block
           {ago(s.createdAt, now)} · {minutesLeft(s, now)} min left
         </Txt>
         <Txt variant="label" tone="success">
-          You get {money(shoutoutPayout(s.offer))}
+          You get {money(shoutoutPayout(s.offer, s.boost))}
         </Txt>
       </Row>
+      <Pressable
+        onPress={() => {
+          tap();
+          router.push(chatHref({ shoutoutId: s.id, neighborId: state.userId! }));
+        }}
+        hitSlop={6}
+        style={{ flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start' }}>
+        <Icon name="chatbubble-ellipses-outline" size={16} tone="primary" />
+        <Txt variant="label" tone="primary">
+          Ask {s.posterName.split(' ')[0]} a question
+        </Txt>
+      </Pressable>
       <Button
         label={busy ? 'Claiming…' : blocked ? 'Finish your current delivery first' : s.kind === 'rent' ? 'I can lend one' : 'I have one'}
         icon={blocked ? undefined : 'hand-right'}
-        kind="accent"
+        kind={blocked ? 'ghost' : 'primary'}
         disabled={busy || blocked}
         onPress={async () => {
           if (s.kind === 'buy' && !(await confirm('Is it new and sealed?', 'Things you sell on Lobb must be unopened. You’ll snap a photo of the seal before you hand it over.', 'Yes, it’s sealed'))) return;
@@ -118,16 +133,17 @@ function OpenShoutout({ shoutout: s, blocked, now }: { shoutout: Shoutout; block
           tap('success');
           router.replace({ pathname: '/deliver/[id]', params: { id: requestId } });
         }}
-        style={{ backgroundColor: blocked ? colors.surfaceHigh : undefined }}
       />
     </Card>
   );
 }
 
 function MyShoutout({ shoutout: s, now }: { shoutout: Shoutout; now: number }) {
+  const { colors } = useTheme();
   const { state, actions } = useStore();
   const request = state.requests.find((r) => r.id === s.requestId);
   const live = !!request && LIVE_STATUSES.includes(request.status);
+  const threads = useShoutoutThreads(s.id, s.status === 'open');
   return (
     <Card style={{ gap: space.md }}>
       <Header s={s} />
@@ -139,8 +155,28 @@ function MyShoutout({ shoutout: s, now }: { shoutout: Shoutout; now: number }) {
         ) : (
           <Pill label="CANCELLED" />
         )}
-        <Txt variant="label">{money(s.offer)}</Txt>
+        <Txt variant="label">{money(s.offer + s.boost)}</Txt>
       </Row>
+      {threads.map((t) => (
+        <Pressable
+          key={t.neighborId}
+          onPress={() => {
+            tap();
+            router.push(chatHref({ shoutoutId: s.id, neighborId: t.neighborId }));
+          }}
+          style={{ flexDirection: 'row', alignItems: 'center', gap: space.sm, padding: space.md, borderRadius: radius.md, backgroundColor: colors.primarySoft }}>
+          <Icon name="chatbubble-ellipses" size={18} tone="primary" />
+          <View style={{ flex: 1 }}>
+            <Txt variant="label" numberOfLines={1}>
+              {t.neighborName}
+            </Txt>
+            <Txt variant="caption" tone="muted" numberOfLines={1}>
+              {t.lastBody}
+            </Txt>
+          </View>
+          <Icon name="chevron-forward" size={16} tone="primary" />
+        </Pressable>
+      ))}
       {s.status === 'open' ? (
         <Button
           label="Cancel shout-out"

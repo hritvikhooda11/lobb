@@ -5,7 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Button, categoryIcon, Icon, Row, Txt, tap } from '@/components/ui';
 import { canRent, shoutoutCategories, type CategoryId, type ItemKind } from '@/data/catalog';
-import { FULFILLMENT, FULFILLMENT_ORDER, money, SHOUTOUT_MAX, SHOUTOUT_MIN, shoutoutPayout, type Fulfillment } from '@/data/pricing';
+import { FULFILLMENT, FULFILLMENT_ORDER, money, RUSH_TIPS, SHOUTOUT_MAX, SHOUTOUT_MIN, shoutoutPayout, type Fulfillment, type RushTip } from '@/data/pricing';
 import { attempt } from '@/lib/alert';
 import { useStore } from '@/store/app-store';
 import { categoryTint, fonts, radius, space, useTheme } from '@/theme';
@@ -21,7 +21,8 @@ export default function NewShoutout() {
   const [text, setText] = useState(params.text ?? '');
   const [kind, setKind] = useState<ItemKind>('buy');
   const [category, setCategory] = useState<CategoryId | null>(null);
-  const [offer, setOffer] = useState(300);
+  const [offer, setOffer] = useState(400);
+  const [boost, setBoost] = useState<RushTip>(0);
   const [fulfillment, setFulfillment] = useState<Fulfillment>('lobby');
   const [note, setNote] = useState('');
   const [busy, setBusy] = useState(false);
@@ -116,11 +117,39 @@ export default function NewShoutout() {
           <View style={{ alignItems: 'center' }}>
             <Txt style={{ fontFamily: fonts.display, fontSize: 34, lineHeight: 40 }}>{money(offer)}</Txt>
             <Txt variant="caption" tone="muted">
-              your neighbor gets {money(shoutoutPayout(offer))}
+              your neighbor gets {money(shoutoutPayout(offer, boost))}
             </Txt>
           </View>
           <StepButton label="+" disabled={offer >= SHOUTOUT_MAX} onPress={() => step(STEP)} />
         </Row>
+      </View>
+
+      <View style={{ gap: space.sm }}>
+        <Row style={{ justifyContent: 'space-between' }}>
+          <Txt variant="label">Need it fast? Add a rush tip</Txt>
+          <Icon name="flame" size={18} color={colors.warning} />
+        </Row>
+        <Row gap={space.sm}>
+          {RUSH_TIPS.map((t) => {
+            const active = t === boost;
+            return (
+              <Pressable
+                key={t}
+                onPress={() => {
+                  tap();
+                  setBoost(t);
+                }}
+                style={{ flex: 1, height: 44, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center', backgroundColor: active ? colors.warning : colors.surface, borderWidth: 1.5, borderColor: active ? colors.warning : colors.border }}>
+                <Txt variant="label" style={{ color: active ? colors.onAccent : colors.text }}>
+                  {t === 0 ? 'No tip' : `+${money(t)}`}
+                </Txt>
+              </Pressable>
+            );
+          })}
+        </Row>
+        <Txt variant="caption" tone="muted">
+          {boost ? 'Shows first with a 🔥 RUSH tag, and the whole tip goes to your neighbor.' : 'Rush shout-outs show first, and the whole tip goes to your neighbor.'}
+        </Txt>
       </View>
 
       <View style={{ gap: space.sm }}>
@@ -159,12 +188,12 @@ export default function NewShoutout() {
       </View>
 
       <Button
-        label={busy ? 'Shouting…' : `Shout it out · ${money(offer)}`}
+        label={busy ? 'Shouting…' : `Shout it out · ${money(offer + boost)}`}
         icon="megaphone"
         disabled={!ready}
         onPress={async () => {
           setBusy(true);
-          const ok = await attempt(() => actions.createShoutout({ text: text.trim(), kind, category: category!, offer, fulfillment, note: note.trim() }));
+          const ok = await attempt(() => actions.createShoutout({ text: text.trim(), kind, category: category!, offer, boost, fulfillment, note: note.trim() }));
           setBusy(false);
           if (!ok) return;
           tap('success');

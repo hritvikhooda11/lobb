@@ -21,7 +21,7 @@ import { supabase } from '@/lib/supabase';
 export const systemNotificationsSupported = Platform.OS === 'ios' || Platform.OS === 'android';
 
 /** Events the server pushes (matches `kind` in public.push_messages). */
-export type PushKind = 'shoutout' | 'order';
+export type PushKind = 'shoutout' | 'order' | 'message';
 
 let pushToken: string | null = null;
 
@@ -86,11 +86,22 @@ export async function unregisterRemotePush() {
 /**
  * Shows a notification right away. `url` is the in-app route to open when it's tapped. Pass
  * `pushedAs` for events the server also pushes; the local copy is then skipped when push is active.
+ * Returns false when it couldn't be shown as a phone notification (no permission yet, or web), so
+ * the caller can show an in-app banner instead. Never throws.
  */
-export async function notify(title: string, body: string, url: string, pushedAs?: PushKind) {
-  if (!systemNotificationsSupported) return;
-  if (pushedAs && remotePushActive()) return;
-  await Notifications.scheduleNotificationAsync({ content: { title, body, data: { url }, sound: true }, trigger: null });
+export async function notify(title: string, body: string, url: string, pushedAs?: PushKind): Promise<boolean> {
+  if (!systemNotificationsSupported) return false;
+  if (pushedAs && remotePushActive()) return true;
+  try {
+    // iOS refuses to schedule anything until the user has allowed notifications.
+    const { granted, ios } = await Notifications.getPermissionsAsync();
+    if (!granted && ios?.status !== Notifications.IosAuthorizationStatus.PROVISIONAL) return false;
+    await Notifications.scheduleNotificationAsync({ content: { title, body, data: { url }, sound: true }, trigger: null });
+    return true;
+  } catch (e) {
+    console.warn('[lobb] local notification failed', e);
+    return false;
+  }
 }
 
 /**

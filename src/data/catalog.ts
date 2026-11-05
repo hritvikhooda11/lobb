@@ -20,9 +20,8 @@ export type ItemKind = 'buy' | 'rent';
 export type Category = { id: CategoryId; label: string; emoji: string; edible: boolean; ageRestricted?: boolean };
 
 export const categories: Category[] = [
-  { id: 'snacks', label: 'Snacks', emoji: '🍿', edible: true },
+  { id: 'snacks', label: 'Snacks & food', emoji: '🍿', edible: true },
   { id: 'drinks', label: 'Drinks', emoji: '🥤', edible: true },
-  { id: 'instant', label: 'Instant', emoji: '🍜', edible: true },
   { id: 'toiletries', label: 'Toiletries', emoji: '🧴', edible: false },
   { id: 'electronics', label: 'Tech', emoji: '🔌', edible: false },
   { id: 'household', label: 'Household', emoji: '🧻', edible: false },
@@ -47,6 +46,10 @@ export type Item = {
   emoji: string;
   /** A bundled require() or a { uri } photo. */
   image?: ImageSource | number;
+  /** 'cover' for real photos (fill the tile); product shots on white use 'contain'. */
+  imageFit?: 'cover' | 'contain';
+  /** The seller's own photo of the actual item, shown next to the catalog picture. */
+  realPhoto?: ImageSource;
   /** Retail market price in cents (looked up from retail sources in production). */
   marketPrice: number;
   /** How many neighbors in your community have this listed right now (mock). */
@@ -72,14 +75,14 @@ export const catalog: Item[] = [
   { id: 'oreos', kind: 'buy', barcode: '044000047009', name: 'Oreo snack pack', size: '6 cookies', category: 'snacks', emoji: '🍪', image: require('@/assets/items/oreo.jpg'), marketPrice: 179, nearbyCount: 2 },
   { id: 'kind-bar', kind: 'buy', barcode: '602652431142', name: 'KIND bar', size: '1.4 oz', category: 'snacks', emoji: '🥜', image: require('@/assets/items/kind.jpg'), marketPrice: 199, nearbyCount: 5 },
   { id: 'goldfish', kind: 'buy', barcode: '014100048145', name: 'Goldfish', size: '1.5 oz bag', category: 'snacks', emoji: '🐟', image: require('@/assets/items/goldfish.jpg'), marketPrice: 129, nearbyCount: 3 },
-  { id: 'cup-noodles', kind: 'buy', barcode: '070662030035', name: 'Cup Noodles', size: 'Chicken', category: 'instant', emoji: '🍜', image: require('@/assets/items/cupnoodles.jpg'), marketPrice: 109, nearbyCount: 7 },
-  { id: 'shin-ramyun', kind: 'buy', barcode: '031146022861', name: 'Shin Ramyun', size: '4.2 oz pack', category: 'instant', emoji: '🔥', image: require('@/assets/items/shin.jpg'), marketPrice: 189, nearbyCount: 4 },
-  { id: 'mac-cup', kind: 'buy', barcode: '021000053834', name: 'Easy Mac cup', size: '2.05 oz', category: 'instant', emoji: '🧀', image: require('@/assets/items/easymac.jpg'), marketPrice: 159, nearbyCount: 2 },
+  { id: 'cup-noodles', kind: 'buy', barcode: '070662030035', name: 'Cup Noodles', size: 'Chicken', category: 'snacks', emoji: '🍜', image: require('@/assets/items/cupnoodles.jpg'), marketPrice: 109, nearbyCount: 7 },
+  { id: 'shin-ramyun', kind: 'buy', barcode: '031146022861', name: 'Shin Ramyun', size: '4.2 oz pack', category: 'snacks', emoji: '🔥', image: require('@/assets/items/shin.jpg'), marketPrice: 189, nearbyCount: 4 },
+  { id: 'mac-cup', kind: 'buy', barcode: '021000053834', name: 'Easy Mac cup', size: '2.05 oz', category: 'snacks', emoji: '🧀', image: require('@/assets/items/easymac.jpg'), marketPrice: 159, nearbyCount: 2 },
   { id: 'toothpaste', kind: 'buy', name: 'Colgate toothpaste', size: 'Travel size', category: 'toiletries', emoji: '🪥', image: require('@/assets/items/toothpaste.jpg'), marketPrice: 149, nearbyCount: 3 },
   { id: 'deodorant', kind: 'buy', name: 'Dove deodorant', size: 'Travel size', category: 'toiletries', emoji: '🧴', image: require('@/assets/items/deodorant.jpg'), marketPrice: 199, nearbyCount: 1 },
-  { id: 'lightning', kind: 'buy', name: 'Lightning cable', size: '3 ft, sealed', category: 'electronics', emoji: '🔋', image: require('@/assets/items/lightning.jpg'), marketPrice: 999, nearbyCount: 1 },
-  { id: 'tissues', kind: 'buy', name: 'Tissues', size: 'Box', category: 'household', emoji: '🤧', image: require('@/assets/items/tissues.jpg'), marketPrice: 199, nearbyCount: 4 },
-  { id: 'aa-batteries', kind: 'buy', name: 'AA batteries', size: '4-pack, sealed', category: 'household', emoji: '🪫', image: require('@/assets/items/aa.jpg'), marketPrice: 549, nearbyCount: 1 },
+  { id: 'lightning', kind: 'buy', name: 'Lightning cable', size: '3 ft, sealed', category: 'electronics', emoji: '🔋', image: require('@/assets/items/lightning.jpg'), imageFit: 'cover', marketPrice: 999, nearbyCount: 1 },
+  { id: 'tissues', kind: 'buy', name: 'Tissues', size: 'Box', category: 'household', emoji: '🤧', image: require('@/assets/items/tissues.jpg'), imageFit: 'cover', marketPrice: 199, nearbyCount: 4 },
+  { id: 'aa-batteries', kind: 'buy', name: 'AA batteries', size: '4-pack, sealed', category: 'household', emoji: '🪫', image: require('@/assets/items/aa.jpg'), imageFit: 'cover', marketPrice: 549, nearbyCount: 1 },
 
   // Rent: borrow and return
   { id: 'ti84', kind: 'rent', name: 'TI-84 Plus calculator', size: 'Graphing', category: 'electronics', emoji: '🧮', image: require('@/assets/items/ti84.jpg'), marketPrice: 11999, nearbyCount: 3 },

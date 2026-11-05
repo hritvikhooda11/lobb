@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { Pressable, View } from 'react-native';
 import QRCode from 'react-native-qrcode-svg';
 
+import { ChatButton } from '@/components/chat-button';
 import { BUY_STEPS, CountdownRing, RadarPulse, RENT_STEPS, StatusSteps } from '@/components/live';
 import { Button, Card, Icon, ItemBadge, ItemPhoto, Pill, Row, Screen, StateBadge, Txt, tap } from '@/components/ui';
 import { communities } from '@/data/catalog';
@@ -52,7 +53,10 @@ export default function RequestStatusScreen() {
             ‹ Home
           </Txt>
         </Pressable>
-        <Pill label={money(total)} />
+        <Row gap={space.sm}>
+          {r.deliverer && LIVE_STATUSES.includes(r.status) ? <ChatButton thread={{ requestId: r.id }} label={`Message ${r.deliverer.name.split(' ')[0]}`} /> : null}
+          <Pill label={money(total)} />
+        </Row>
       </Row>
 
       <Row style={{ marginTop: space.lg }}>
@@ -237,7 +241,7 @@ function HandoffQR({ code, title, body }: { code?: string; title: string; body: 
         {code ? <QRCode value={code} size={200} color="#0D0A14" backgroundColor="#fff" /> : <View style={{ width: 200, height: 200 }} />}
       </View>
       {code ? (
-        <Txt style={{ fontFamily: fonts.display, fontSize: 28, letterSpacing: 6 }} center>
+        <Txt style={{ fontFamily: fonts.display, fontSize: 28, lineHeight: 36, letterSpacing: 6, marginTop: space.md }} center>
           {code}
         </Txt>
       ) : null}

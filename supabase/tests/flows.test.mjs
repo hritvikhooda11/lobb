@@ -111,7 +111,7 @@ await expectOk('dan lists water (3)', ids.dan, `insert into public.listings (ite
 await expectFail('cam (other building) still can’t request Coke', ids.cam, `select public.create_request('coke-12', '')`, [], /Nobody nearby/);
 await expectFail('cannot insert a request directly', ids.alex, `insert into public.requests (kind, buyer_id, item_id, community_id, item_price, deliverer_fee, platform_fee, total) values ('buy', auth.uid(), 'coke-12', 'standard', 1, 1, 1, 3)`);
 const req = one(await expectOk('alex requests a Coke (lobby meetup)', ids.alex, `select * from public.create_request('coke-12', '', null, 'lobby')`));
-req?.total === 225 && req?.fulfillment === 'lobby' && req?.fulfillment_adjust === 0 ? ok('lobby = base price $2.25 (matches app)') : bad(`total ${req?.total} ${req?.fulfillment}`);
+req?.total === 325 && req?.fulfillment === 'lobby' && req?.fulfillment_adjust === 0 ? ok('lobby = base price $3.25 (matches app)') : bad(`total ${req?.total} ${req?.fulfillment}`);
 (await as(ids.alex, `select * from public.request_private where request_id = $1`, [req.id])).rows.length === 0 ? ok('lobby meetup stores no room') : bad('room stored for lobby');
 await expectFail('second live request blocked', ids.alex, `select public.create_request('water-16', 'x')`, [], /Finish your current/);
 
@@ -126,7 +126,7 @@ await expectFail('listing adjust capped at ±5%', ids.bri, `update public.listin
 await expectFail('buyer cannot accept own request', ids.alex, `select public.accept_request($1)`, [req.id], /Someone else/);
 await expectFail('other building cannot accept', ids.cam, `select public.accept_request($1)`, [req.id], /Someone else/);
 const acc = one(await expectOk('bri accepts', ids.bri, `select * from public.accept_request($1)`, [req.id]));
-acc?.seller_payout === 205 ? ok('payout uses bri’s +5% ($2.05)') : bad(`payout ${acc?.seller_payout}`);
+acc?.seller_payout === 280 ? ok('payout uses bri’s +5% ($2.80)') : bad(`payout ${acc?.seller_payout}`);
 await expectFail('nobody can accept twice', ids.bri, `select public.accept_request($1)`, [req.id], /Finish your current|Someone else/);
 
 (await as(ids.bri, `select * from public.handoff_codes`)).rows.length === 0 ? ok('deliverer cannot read the handoff code') : bad('code leaked to deliverer');
@@ -149,7 +149,7 @@ Number(rating?.rating_avg) === 4 && rating?.rating_count === 1 ? ok('bri rating 
 console.log('\nRental flow');
 await expectOk('bri lists TI-84 for rent', ids.bri, `insert into public.listings (item_id) values ('ti84')`);
 const rent = one(await expectOk('alex rents TI-84 for 1 day', ids.alex, `select * from public.create_request('ti84', 'Study room', '1d')`));
-rent?.deliverer_fee === 720 && rent?.hold_amount === 11999 ? ok('rent $7.20, hold $119.99 (matches app)') : bad(`rent ${rent?.deliverer_fee} hold ${rent?.hold_amount}`);
+rent?.deliverer_fee === 1200 && rent?.hold_amount === 11999 ? ok('rent $12.00, hold $119.99 (matches app)') : bad(`rent ${rent?.deliverer_fee} hold ${rent?.hold_amount}`);
 await expectFail('cam cannot lend what she doesn’t list', ids.cam, `select public.accept_request($1)`, [rent.id]);
 await expectOk('bri accepts rental', ids.bri, `select public.accept_request($1)`, [rent.id]);
 await expectOk('bri condition photo', ids.bri, `select public.verify_seal($1, 'bri/cond.jpg')`, [rent.id]);
@@ -166,24 +166,24 @@ returned?.status === 'returned' ? ok('status returned') : bad(`status ${JSON.str
 
 console.log('\nDelivery options and price differences');
 const door = one(await expectOk('alex requests Coke for door drop-off', ids.alex, `select * from public.create_request('coke-12', 'knock twice', null, 'dropoff')`));
-door?.total === 260 && door?.fulfillment_adjust === 35 ? ok('door drop-off +15% = $2.60 (+$0.35)') : bad(`door total ${door?.total} adjust ${door?.fulfillment_adjust}`);
+door?.total === 375 && door?.fulfillment_adjust === 50 ? ok('door drop-off +15% = $3.75 (+$0.50)') : bad(`door total ${door?.total} adjust ${door?.fulfillment_adjust}`);
 one(await as(ids.alex, `select buyer_room from public.request_private where request_id = $1`, [door.id]))?.buyer_room === '912' ? ok('buyer’s room is saved for the drop-off') : bad('buyer room missing');
 (await as(ids.bri, `select * from public.request_private where request_id = $1`, [door.id])).rows.length === 0 ? ok('neighbors can’t see the room before accepting') : bad('room leaked before accept');
 await expectOk('bri accepts the drop-off', ids.bri, `select public.accept_request($1)`, [door.id]);
 one(await as(ids.bri, `select buyer_room from public.request_private where request_id = $1`, [door.id]))?.buyer_room === '912' ? ok('deliverer sees the room after accepting') : bad('deliverer cannot see room');
 (await as(ids.dan, `select * from public.request_private where request_id = $1`, [door.id])).rows.length === 0 ? ok('other neighbors still can’t see it') : bad('room leaked to a bystander');
-one(await db.query(`select seller_payout from public.requests where id = $1`, [door.id]))?.seller_payout === 240 ? ok('drop-off pays the seller more ($2.40)') : bad('drop-off payout');
+one(await db.query(`select seller_payout from public.requests where id = $1`, [door.id]))?.seller_payout === 330 ? ok('drop-off pays the seller more ($3.30)') : bad('drop-off payout');
 await db.exec(`update public.requests set status = 'cancelled' where id = '${door.id}'`);
 
 const pick = one(await expectOk('alex requests Coke for pickup', ids.alex, `select * from public.create_request('coke-12', '', null, 'pickup')`));
-pick?.total === 200 && pick?.fulfillment_adjust === -25 ? ok('pickup −10% = $2.00 (−$0.25)') : bad(`pickup total ${pick?.total} adjust ${pick?.fulfillment_adjust}`);
+pick?.total === 290 && pick?.fulfillment_adjust === -35 ? ok('pickup −10% = $2.90 (−$0.35)') : bad(`pickup total ${pick?.total} adjust ${pick?.fulfillment_adjust}`);
 await expectOk('bri accepts the pickup', ids.bri, `select public.accept_request($1)`, [pick.id]);
 one(await as(ids.alex, `select seller_room from public.request_private where request_id = $1`, [pick.id]))?.seller_room === '407' ? ok('buyer is told which room to go to (407)') : bad('seller room missing');
-one(await db.query(`select seller_payout from public.requests where id = $1`, [pick.id]))?.seller_payout === 180 ? ok('pickup pays the seller less ($1.80)') : bad('pickup payout');
+one(await db.query(`select seller_payout from public.requests where id = $1`, [pick.id]))?.seller_payout === 245 ? ok('pickup pays the seller less ($2.45)') : bad('pickup payout');
 await db.exec(`update public.requests set status = 'cancelled' where id = '${pick.id}'`);
 
 const rentDoor = one(await expectOk('alex rents TI-84 with door drop-off', ids.alex, `select * from public.create_request('ti84', '', '3h', 'dropoff')`));
-rentDoor?.total === 445 ? ok('rental door drop-off: ($3.60 + $0.25) +15% = $4.45') : bad(`rental door total ${rentDoor?.total}`);
+rentDoor?.total === 720 ? ok('rental door drop-off: ($6.00 + $0.25) +15% = $7.20') : bad(`rental door total ${rentDoor?.total}`);
 await db.exec(`update public.requests set status = 'cancelled' where id = '${rentDoor.id}'`);
 await expectOk('eve joins The Standard but skips the room (old account)', ids.eve, `update public.profiles set community_id = 'standard' where id = auth.uid()`);
 await expectFail('door drop-off needs a room number', ids.eve, `select public.create_request('coke-12', '', null, 'dropoff')`, [], /room number/);
@@ -270,7 +270,7 @@ const so = one(await expectOk('alex shouts for a plunger (borrow, $3, door)', id
 await expectFail('can’t claim your own', ids.alex, `select public.claim_shoutout($1)`, [so.id], /your own/);
 await expectFail('cam can’t claim from another building', ids.cam, `select public.claim_shoutout($1)`, [so.id], /Someone else/);
 const claim = one(await expectOk('bri says “I have one”', ids.bri, `select * from public.claim_shoutout($1)`, [so.id]));
-claim?.status === 'accepted' && claim?.total === 300 && claim?.seller_payout === 275 && claim?.rental_hours === 24 ? ok('it becomes an accepted 1-day loan: alex pays $3, bri gets $2.75') : bad(`claim ${JSON.stringify(claim)}`);
+claim?.status === 'accepted' && claim?.total === 300 && claim?.seller_payout === 250 && claim?.rental_hours === 24 ? ok('it becomes an accepted 1-day loan: alex pays $3, bri gets $2.50') : bad(`claim ${JSON.stringify(claim)}`);
 await expectFail('nobody else can claim it now', ids.dan, `select public.claim_shoutout($1)`, [so.id], /Someone else|Finish/);
 one(await as(ids.bri, `select buyer_room from public.request_private where request_id = $1`, [claim.id]))?.buyer_room === '912' ? ok('bri gets alex’s room for the drop-off') : bad('room missing on shout-out');
 const special = one(await db.query(`select special from public.items i join public.requests r on r.item_id = i.id where r.id = $1`, [claim.id]));
@@ -317,7 +317,7 @@ const soMsgs = await asServer(`select * from public.push_messages('shoutouts', $
 const soTo = soMsgs.map((m) => m.token).sort();
 soTo.join() === tok('bri') ? ok('shout-out goes to bri only (not alex herself, not dan with alerts off, not cam in another building)') : bad(`shout-out recipients ${soTo}`);
 const m0 = soMsgs[0];
-m0?.title === '📣 HDMI cable?' && m0?.body === 'Alex will pay $2.50 to borrow one. Have it?' && m0?.url === '/shoutouts' ? ok(`shout-out text: “${m0.title} ${m0.body}”`) : bad(`shout-out message ${JSON.stringify(m0)}`);
+m0?.title === '📣 HDMI cable?' && m0?.body === 'Alex pays you $2.00 to borrow one. Have it?' && m0?.url === '/shoutouts' ? ok(`shout-out text: “${m0.title} ${m0.body}”`) : bad(`shout-out message ${JSON.stringify(m0)}`);
 !JSON.stringify(soMsgs).includes('912') ? ok('no room number in the shout-out push') : bad('room number leaked into push');
 await as(ids.alex, `select public.cancel_shoutout($1)`, [pso.id]);
 (await asServer(`select * from public.push_messages('shoutouts', $1)`, [pso.id])).length === 0 ? ok('a cancelled shout-out sends nothing') : bad('cancelled shout-out still pushed');
@@ -333,6 +333,39 @@ await expectOk('a phone signed in to a new account moves to it', ids.cam, `selec
 !(await asServer(`select * from public.push_messages('requests', $1)`, [preq.id])).some((m) => m.token === tok('bri')) ? ok('bri no longer gets pushes on that phone') : bad('old account still pushed');
 await asServer(`select public.forget_push_tokens(array[$1])`, [tok('dan')]);
 one(await db.query(`select count(*)::int as n from public.push_tokens where expo_push_token = $1`, [tok('dan')]))?.n === 0 ? ok('server forgets uninstalled phones') : bad('dead token kept');
+
+console.log('\nRush shout-outs and chat');
+await db.exec(`update public.requests set status = 'cancelled' where status in ('open', 'accepted', 'arriving', 'renting', 'returning')`);
+await expectFail('rush tip must be $2 or $5', ids.alex, `select public.create_shoutout('Phone charger', 'buy', 'electronics', 600, 'lobby', '', null, 300)`, [], /rush tip/);
+await as(ids.bri, `select public.register_push_token('ExponentPushToken[bri-2]', 'ios')`);
+const rush = one(await expectOk('alex posts a rush shout-out ($6 + $2 tip)', ids.alex, `select * from public.create_shoutout('Phone charger', 'buy', 'electronics', 600, 'lobby', '', null, 200)`));
+rush?.boost === 200 ? ok('rush tip saved') : bad(`boost ${rush?.boost}`);
+const rushMsg = (await asServer(`select * from public.push_messages('shoutouts', $1)`, [rush.id]))[0];
+rushMsg?.title === '🔥 RUSH: Phone charger?' && rushMsg?.body === 'Alex pays you $7.40. Have one?' ? ok(`rush push text: “${rushMsg.title} ${rushMsg.body}”`) : bad(`rush push ${JSON.stringify(rushMsg)}`);
+await expectOk('bri asks alex about it', ids.bri, `insert into public.messages (shoutout_id, neighbor_id, body) values ($1, auth.uid(), 'USB-C or Lightning?')`, [rush.id]);
+(await as(ids.alex, `select body from public.messages where shoutout_id = $1`, [rush.id])).rows.length === 1 ? ok('alex sees bri’s question') : bad('poster cannot see question');
+(await as(ids.dan, `select body from public.messages where shoutout_id = $1`, [rush.id])).rows.length === 0 ? ok('dan can’t read bri’s thread') : bad('chat leaked to a neighbor');
+await expectFail('bri can’t write as someone else’s thread', ids.bri, `insert into public.messages (shoutout_id, neighbor_id, body) values ($1, $2, 'hi')`, [rush.id, ids.dan]);
+await expectFail('cam (other building) can’t message about it', ids.cam, `insert into public.messages (shoutout_id, neighbor_id, body) values ($1, auth.uid(), 'hi')`, [rush.id]);
+await expectFail('can’t fake the sender', ids.bri, `insert into public.messages (shoutout_id, neighbor_id, sender_id, body) values ($1, auth.uid(), $2, 'hi')`, [rush.id, ids.alex]);
+await expectOk('alex replies to bri', ids.alex, `insert into public.messages (shoutout_id, neighbor_id, body) values ($1, $2, 'USB-C please')`, [rush.id, ids.bri]);
+const rushClaim = one(await expectOk('bri claims the rush shout-out', ids.bri, `select * from public.claim_shoutout($1)`, [rush.id]));
+rushClaim?.total === 800 && rushClaim?.seller_payout === 740 && rushClaim?.platform_fee === 60 ? ok('alex pays $8, bri gets $7.40 (whole tip), Lobb keeps $0.60') : bad(`rush claim ${JSON.stringify(rushClaim)}`);
+await expectOk('bri messages alex on the order', ids.bri, `insert into public.messages (request_id, body) values ($1, 'On my way')`, [rushClaim.id]);
+(await as(ids.alex, `select body from public.messages where request_id = $1`, [rushClaim.id])).rows.length === 1 ? ok('alex sees it') : bad('buyer cannot see order chat');
+await expectFail('dan can’t message into their order', ids.dan, `insert into public.messages (request_id, body) values ($1, 'hi')`, [rushClaim.id]);
+const chatPush = await asServer(`select * from public.push_messages('messages', (select id from public.messages where request_id = $1 limit 1))`, [rushClaim.id]);
+chatPush.length === 1 && chatPush[0].url === `/chat?request=${rushClaim.id}` && chatPush[0].kind === 'message' ? ok('chat message pushes to the other person only') : bad(`chat push ${JSON.stringify(chatPush)}`);
+
+console.log('\nRegistered sellers');
+await db.exec(`insert into public.seller_invites (code, note) values ('LOBBTEST1', 'test')`);
+(await as(ids.bri, `select * from public.seller_invites`).catch(() => ({ rows: [] }))).rows.length === 0 ? ok('invite codes are hidden from users') : bad('invite codes readable');
+await expectFail('a wrong code is refused', ids.bri, `select public.redeem_seller_code('NOPE1234')`, [], /isn’t valid/);
+await expectOk('bri joins with a code (any case)', ids.bri, `select public.redeem_seller_code('lobbtest1')`);
+one(await db.query(`select role from public.profiles where id = $1`, [ids.bri]))?.role === 'seller' ? ok('bri is a registered seller') : bad('role not set');
+await expectFail('a used code can’t be reused', ids.cam, `select public.redeem_seller_code('LOBBTEST1')`, [], /isn’t valid/);
+await expectFail('sellers can’t make themselves admin', ids.bri, `update public.profiles set role = 'admin' where id = auth.uid()`);
+await expectFail('sellers still can’t list alcohol', ids.bri, `insert into public.listings (item_id) values ('modelo')`);
 
 console.log('\nRows to check');
 const hasPriceFns = one(await db.query(`select (select total from public.buy_price(11999)) as a, public.rent_per_day(1500) as b`));

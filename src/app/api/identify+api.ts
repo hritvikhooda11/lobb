@@ -34,7 +34,7 @@ const Result = z.object({
   brand: z.string().describe('Brand on the package, e.g. "Vitafusion" or "Good & Gather". Empty if unknown.'),
   name: z.string().describe('Product name without the brand, e.g. "Women’s Multivitamin Gummies"'),
   size: z.string().describe('Size or count printed on the package, e.g. "12 fl oz", "150 ct". Empty if not visible.'),
-  category: z.enum(['snacks', 'drinks', 'instant', 'toiletries', 'electronics', 'household', 'other']),
+  category: z.enum(['snacks', 'drinks', 'toiletries', 'electronics', 'household', 'other']),
   barcode_digits: z.string().describe('The UPC/EAN digits if they are readable in the photo, else empty'),
   confidence: z.enum(['high', 'medium', 'low']).describe('How sure you are of the exact product (brand + variant + size)'),
 });

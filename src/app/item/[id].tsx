@@ -1,3 +1,4 @@
+import { Image } from 'expo-image';
 import { router, useLocalSearchParams } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
 import { useState } from 'react';
@@ -46,7 +47,21 @@ export default function ConfirmRequest() {
 
   return (
     <ScrollView style={{ backgroundColor: colors.bg }} contentContainerStyle={{ padding: space.xl, paddingBottom: insets.bottom + space.xl }} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">
-      <ItemPhoto item={item} height={200} radius={radius.lg} />
+      {item.realPhoto ? (
+        <Row gap={space.sm} style={{ alignItems: 'stretch' }}>
+          <View style={{ flex: 1 }}>
+            <ItemPhoto item={item} height={200} radius={radius.lg} />
+          </View>
+          <View style={{ flex: 1, height: 200, borderRadius: radius.lg, overflow: 'hidden', backgroundColor: colors.surfaceHigh }}>
+            <Image source={item.realPhoto} style={{ width: '100%', height: '100%' }} contentFit="cover" transition={150} />
+            <View style={{ position: 'absolute', left: 8, bottom: 8 }}>
+              <Pill icon="camera" label="Real photo" tone="default" />
+            </View>
+          </View>
+        </Row>
+      ) : (
+        <ItemPhoto item={item} height={200} radius={radius.lg} />
+      )}
       <View style={{ marginTop: space.lg, gap: 4 }}>
         <Txt variant="title">{item.name}</Txt>
         <Txt tone="muted">{item.size}</Txt>

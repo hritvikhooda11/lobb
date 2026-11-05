@@ -1,7 +1,7 @@
-// Sends remote push notifications for new shout-outs and new orders.
+// Sends remote push notifications for new shout-outs, new orders and chat messages.
 //
-// Two database webhooks (Database → Webhooks, see SUPABASE_SETUP.md) call this on INSERT into
-// public.shoutouts and public.requests. Who gets notified and the exact text come from the
+// Three database webhooks (Database → Webhooks, see SUPABASE_SETUP.md) call this on INSERT into
+// public.shoutouts, public.requests and public.messages. Who gets notified and the exact text come from the
 // database (public.push_messages, tested in supabase/tests/flows.test.mjs), so this function only
 // batches the messages to Expo's push API and forgets phones Expo says are gone.
 //
@@ -11,7 +11,7 @@
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 
 type WebhookPayload = { type: 'INSERT' | 'UPDATE' | 'DELETE'; table: string; schema: string; record: { id: string } | null };
-type PushMessage = { token: string; title: string; body: string; url: string; kind: 'shoutout' | 'order' };
+type PushMessage = { token: string; title: string; body: string; url: string; kind: 'shoutout' | 'order' | 'message' };
 type Ticket = { status: 'ok'; id: string } | { status: 'error'; message: string; details?: { error?: string } };
 
 const EXPO_PUSH_URL = 'https://exp.host/--/api/v2/push/send';
@@ -28,7 +28,7 @@ Deno.serve(async (req) => {
   }
 
   const payload = (await req.json()) as WebhookPayload;
-  if (payload.type !== 'INSERT' || payload.schema !== 'public' || !payload.record?.id || !['shoutouts', 'requests'].includes(payload.table)) {
+  if (payload.type !== 'INSERT' || payload.schema !== 'public' || !payload.record?.id || !['shoutouts', 'requests', 'messages'].includes(payload.table)) {
     return Response.json({ sent: 0, skipped: 'not a new shout-out or request' });
   }
 

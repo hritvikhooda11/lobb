@@ -81,7 +81,7 @@ function sizeFromTitle(title: string) {
 function categoryFromPath(path: string): CategoryId | null {
   const p = path.toLowerCase();
   if (/beverage|drink|soda|water|juice|coffee|tea\b/.test(p)) return 'drinks';
-  if (/noodle|soup|pasta|meal/.test(p)) return 'instant';
+  if (/noodle|soup|pasta|meal/.test(p)) return 'snacks';
   if (/snack|candy|chip|cookie|cracker|nut|chocolate|food/.test(p)) return 'snacks';
   if (/personal care|health & beauty|oral|deodorant|soap|shampoo|cosmetic/.test(p)) return 'toiletries';
   if (/electronic|cable|charger|batter|computer|phone/.test(p)) return 'electronics';
@@ -129,7 +129,7 @@ const CATEGORY_TAGS: Record<string, CategoryId> = Object.fromEntries(
   (
     [
       ['drinks', ['beverages', 'carbonated-drinks', 'sodas', 'colas', 'waters', 'spring-waters', 'energy-drinks', 'juices', 'teas', 'iced-teas', 'coffees', 'sports-drinks']],
-      ['instant', ['instant-noodles', 'instant-noodle-soups', 'noodles', 'instant-pasta', 'dehydrated-soups', 'dried-meals', 'pasta-dishes', 'macaroni-and-cheese']],
+      ['snacks', ['instant-noodles', 'instant-noodle-soups', 'noodles', 'instant-pasta', 'dehydrated-soups', 'dried-meals', 'pasta-dishes', 'macaroni-and-cheese']],
       ['snacks', ['snacks', 'sweet-snacks', 'salty-snacks', 'biscuits', 'cookies', 'crackers', 'chips-and-fries', 'crisps', 'candies', 'confectioneries', 'chocolates', 'cereal-bars', 'nuts', 'popcorn']],
       ['toiletries', ['toothpastes', 'deodorants', 'shampoos', 'soaps', 'body-hygiene', 'oral-care']],
       ['electronics', ['batteries', 'cables', 'chargers', 'electronics']],

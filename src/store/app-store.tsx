@@ -86,6 +86,8 @@ export type Profile = {
   reliability: number;
   /** Lobb admins can sell alcohol. Set by Lobb staff only. */
   isAdmin: boolean;
+  /** Registered sellers (and admins): neighbors Lobb pays to keep items stocked. Joined with an invite code. */
+  isSeller: boolean;
   notifyShoutouts: boolean;
   /** Age from the birthdate the user confirmed (private). Null until they confirm it. */
   age: number | null;
@@ -102,8 +104,10 @@ export type Shoutout = {
   note: string;
   kind: ItemKind;
   category: CategoryId;
-  /** All-in price the poster will pay, in cents. */
+  /** All-in price the poster will pay, in cents (before any rush tip). */
   offer: number;
+  /** Rush tip on top of the offer; all of it goes to the neighbor. */
+  boost: number;
   fulfillment: Fulfillment;
   rentalLabel?: string;
   status: 'open' | 'claimed' | 'cancelled';
@@ -122,6 +126,7 @@ type DbShoutout = {
   kind: ItemKind;
   category: CategoryId;
   offer: number;
+  boost: number;
   fulfillment: Fulfillment;
   rental_hours: number | null;
   status: Shoutout['status'];
@@ -172,9 +177,13 @@ type DbItem = {
   price_source_url: string | null;
   special: boolean;
   created_by: string | null;
+  photo_url: string | null;
 };
 
-const ITEM_COLUMNS = 'id, kind, barcode, name, size, category, emoji, image_url, market_price, lobb_price, price_source, price_source_url, special, created_by';
+const ITEM_COLUMNS = 'id, kind, barcode, name, size, category, emoji, image_url, photo_url, market_price, lobb_price, price_source, price_source_url, special, created_by';
+
+/** Photos sellers took themselves fill their tile; product-database shots sit on white. */
+const isRealPhoto = (url: string) => url.includes('/item-photos/');
 
 const yearsSince = (isoDate: string) => {
   const b = new Date(isoDate);
@@ -230,6 +239,8 @@ function toItem(row: DbItem, sellers: Map<string, number>, userId: string | null
     category: row.category,
     emoji: row.emoji,
     image: row.image_url ? { uri: row.image_url } : bundled?.image,
+    imageFit: row.image_url ? (isRealPhoto(row.image_url) ? 'cover' : 'contain') : bundled?.imageFit,
+    realPhoto: row.photo_url ? { uri: row.photo_url } : undefined,
     marketPrice: row.market_price,
     nearbyCount: sellers.get(row.id) ?? 0,
     addedByMe: !!userId && row.created_by === userId && !row.special,
@@ -270,6 +281,7 @@ function useAppState() {
           rating: Number(row.rating_avg),
           reliability: row.reliability_score,
           isAdmin: row.role === 'admin',
+          isSeller: row.role === 'seller' || row.role === 'admin',
           notifyShoutouts: row.notify_shoutouts,
           age: home?.birthdate ? yearsSince(home.birthdate) : null,
           alcoholEnabled: !!community?.alcohol_enabled,
@@ -411,7 +423,7 @@ function useAppState() {
     const rows = (await must(
       supabase
         .from('shoutouts')
-        .select('id, user_id, text, note, kind, category, offer, fulfillment, rental_hours, status, claimed_by, request_id, created_at, expires_at')
+        .select('id, user_id, text, note, kind, category, offer, boost, fulfillment, rental_hours, status, claimed_by, request_id, created_at, expires_at')
         .or(`user_id.eq.${userId},and(status.eq.open,expires_at.gt.${new Date().toISOString()})`)
         .order('created_at', { ascending: false })
         .limit(40),
@@ -428,6 +440,7 @@ function useAppState() {
       kind: r.kind,
       category: r.category,
       offer: r.offer,
+      boost: r.boost ?? 0,
       fulfillment: r.fulfillment,
       rentalLabel: rentalLabel(r.rental_hours),
       status: r.status,
@@ -587,33 +600,66 @@ function useAppState() {
         );
         await Promise.all([loadListings(), loadCatalog()]);
       },
+      /** Quick stock (registered sellers): set how many you have. 0 hides the listing. */
+      setStock: async (itemId: string, quantity: number) => {
+        const qty = Math.max(0, Math.min(99, Math.round(quantity)));
+        setState((s) => {
+          const exists = s.listings.some((l) => l.itemId === itemId);
+          const listings = exists
+            ? s.listings.map((l) => (l.itemId === itemId ? { ...l, quantity: qty, active: qty > 0 } : l))
+            : [{ itemId, quantity: qty, active: qty > 0, adjustPct: 0 }, ...s.listings];
+          stateRef.current = { ...stateRef.current, listings };
+          return { ...s, listings };
+        });
+        const existing = stateRef.current.listings.find((l) => l.itemId === itemId);
+        await must(
+          supabase
+            .from('listings')
+            .upsert({ seller_id: uid(), item_id: itemId, quantity: qty, adjust_pct: existing?.adjustPct ?? 0, active: qty > 0 }, { onConflict: 'seller_id,item_id' }),
+        );
+      },
+      /** Becomes a registered seller with a code from Lobb. */
+      redeemSellerCode: async (code: string) => {
+        await must(supabase.rpc('redeem_seller_code', { p_code: code }));
+        await loadProfile(uid());
+      },
       toggleListing: async (itemId: string) => {
         const listing = stateRef.current.listings.find((l) => l.itemId === itemId);
         if (!listing) return;
         setState((s) => ({ ...s, listings: s.listings.map((l) => (l.itemId === itemId ? { ...l, active: !l.active } : l)) }));
         await must(supabase.from('listings').update({ active: !listing.active }).eq('seller_id', uid()).eq('item_id', itemId));
       },
-      /** Creates a brand-new item from a server price quote. `photo` is a local base64 photo or a product image URL. */
       /**
-       * Creates a brand-new item from a server price quote. `photo` is a local base64 photo or a product
-       * image URL. `price` is the seller's own price (cents), allowed within ±50% of the quote.
+       * Creates a brand-new item from a server price quote. `photo` is the seller's own photo (uploaded);
+       * `catalogImage` is the product database's picture, used as the store image when there is one.
+       * `price` is the seller's own price (cents), allowed within ±50% of the quote.
        */
-      createItem: async (input: { quoteId: string; size: string; barcode?: string; photo: { base64?: string | null; uri: string }; price?: number }) => {
-        const imageUrl = input.photo.base64 ? publicPhotoUrl(await uploadPhoto('item-photos', uid(), 'item', input.photo.base64)) : input.photo.uri;
+      createItem: async (input: { quoteId: string; size: string; barcode?: string; photo: { base64?: string | null; uri: string }; catalogImage?: string | null; price?: number }) => {
+        const realPhoto = input.photo.base64 ? publicPhotoUrl(await uploadPhoto('item-photos', uid(), 'item', input.photo.base64)) : null;
+        const imageUrl = input.catalogImage ?? realPhoto ?? input.photo.uri;
         await must(
-          supabase.rpc('create_item', { p_quote_id: input.quoteId, p_size: input.size, p_image_url: imageUrl, p_barcode: input.barcode ?? null, p_adjust_pct: 0, p_price: input.price ?? null }),
+          supabase.rpc('create_item', {
+            p_quote_id: input.quoteId,
+            p_size: input.size,
+            p_image_url: imageUrl,
+            p_barcode: input.barcode ?? null,
+            p_adjust_pct: 0,
+            p_price: input.price ?? null,
+            p_photo_url: input.catalogImage ? realPhoto : null,
+          }),
         );
         await Promise.all([loadCatalog(), loadListings()]);
       },
 
       // Shout-outs
-      createShoutout: async (input: { text: string; kind: ItemKind; category: CategoryId; offer: number; fulfillment: Fulfillment; note: string }) => {
+      createShoutout: async (input: { text: string; kind: ItemKind; category: CategoryId; offer: number; boost: number; fulfillment: Fulfillment; note: string }) => {
         await must(
           supabase.rpc('create_shoutout', {
             p_text: input.text,
             p_kind: input.kind,
             p_category: input.category,
             p_offer: input.offer,
+            p_boost: input.boost,
             p_fulfillment: input.fulfillment,
             p_note: input.note,
           }),

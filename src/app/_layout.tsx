@@ -6,6 +6,7 @@ import { useEffect } from 'react';
 import { ActivityIndicator, View } from 'react-native';
 
 import { SellerAlerts } from '@/components/seller-alerts';
+import { MessageAlerts } from '@/components/message-alerts';
 import { ShoutoutAlerts } from '@/components/shoutout-alerts';
 import { SetupNeeded } from '@/components/setup-needed';
 import { supabaseConfigured } from '@/lib/supabase';
@@ -41,10 +42,13 @@ function RootStack() {
           <Stack.Screen name="list-item" options={{ presentation: 'modal' }} />
           <Stack.Screen name="shoutouts" options={{ presentation: 'modal' }} />
           <Stack.Screen name="shoutout-new" options={{ presentation: 'modal' }} />
+          <Stack.Screen name="stock" options={{ presentation: 'modal' }} />
+          <Stack.Screen name="chat" />
         </Stack.Protected>
       </Stack>
       {signedIn ? <SellerAlerts /> : null}
       {signedIn ? <ShoutoutAlerts /> : null}
+      {signedIn ? <MessageAlerts /> : null}
     </>
   );
 }
