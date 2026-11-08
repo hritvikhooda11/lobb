@@ -241,7 +241,7 @@ function LiveBanner({ requestId }: { requestId: string }) {
   const label = {
     open: 'Asking your neighbors…',
     accepted: `${name} is on the way`,
-    arriving: `${name} is at your door!`,
+    arriving: r.fulfillment === 'dropoff' ? `${name} is at your door!` : r.fulfillment === 'lobby' ? `${name} is in the lobby!` : `${name} is ready for you!`,
     renting: 'You’re borrowing this',
     returning: `Returning to ${name}`,
   }[r.status as 'open' | 'accepted' | 'arriving' | 'renting' | 'returning'];

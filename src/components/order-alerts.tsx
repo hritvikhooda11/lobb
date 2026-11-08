@@ -9,7 +9,15 @@ import { usePathname } from 'expo-router';
 import { useEffect, useRef } from 'react';
 
 import { notify } from '@/lib/notify';
+import { showToast } from '@/lib/toast';
 import { useStore, type Job, type Request } from '@/store/app-store';
+
+/** Phone notification when possible; otherwise (web, or not allowed) an in-app banner, plus a buzz where supported. */
+async function alert(title: string, body: string, url: string, pushedAs?: 'arrival') {
+  if (await notify(title, body, url, pushedAs)) return;
+  showToast({ title, body, url });
+  if (typeof navigator !== 'undefined' && 'vibrate' in navigator) navigator.vibrate?.(200);
+}
 
 export function OrderAlerts() {
   const { state } = useStore();
@@ -36,12 +44,12 @@ export function OrderAlerts() {
         const who = r.deliverer?.name ?? 'A neighbor';
         const url = `/request/${r.id}`;
         if (before === 'open' && r.status === 'accepted') {
-          void notify(`🎉 ${who} accepted`, `They’re bringing your ${nameOf(r.itemId)}.`, url);
+          void alert(`🎉 ${who} accepted`, `They’re bringing your ${nameOf(r.itemId)}.`, url);
         } else if (before === 'accepted' && r.status === 'arriving') {
           const title =
             r.fulfillment === 'dropoff' ? `🚪 ${who} is at your door` : r.fulfillment === 'lobby' ? `🛋️ ${who} is in the lobby` : `✅ ${who} is ready for you`;
           const body = r.fulfillment === 'pickup' ? `Head over to get your ${nameOf(r.itemId)}. Have your QR code ready.` : `They have your ${nameOf(r.itemId)}. Have your QR code ready.`;
-          void notify(title, body, url, 'arrival');
+          void alert(title, body, url, 'arrival');
         }
       }
     }
@@ -55,7 +63,7 @@ export function OrderAlerts() {
         seenHere.current.set(j.id, j.buyerHereAt);
         if (!j.buyerHereAt || j.buyerHereAt === before || pathRef.current === `/deliver/${j.id}`) continue;
         const title = j.fulfillment === 'pickup' ? `🚪 ${j.buyerName} is at your door` : `🛋️ ${j.buyerName} is waiting in the lobby`;
-        void notify(title, `They’re ready for the ${nameOf(j.itemId)}.`, `/deliver/${j.id}`, 'arrival');
+        void alert(title, `They’re ready for the ${nameOf(j.itemId)}.`, `/deliver/${j.id}`, 'arrival');
       }
     }
   }, [state.activityLoaded, state.requests, state.jobs, state.items]);
