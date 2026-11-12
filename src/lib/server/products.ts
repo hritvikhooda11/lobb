@@ -144,6 +144,13 @@ const krogerIds = (barcode: string) => {
   return [...new Set([d.slice(0, -1).padStart(13, '0'), d.padStart(13, '0')])];
 };
 
+/** How many units a pack holds ("12 pk", "6-pack", "24 ct", "4F-Pk" → 12, 6, 24, 4); 1 if it isn't a pack. */
+export function packCount(text: string) {
+  const m = text.match(/\b(\d{1,3})\s*-?\s*(?:f-?)?(?:pk|pack|ct|count)\b/i);
+  const n = m ? Number(m[1]) : 1;
+  return n >= 2 && n <= 100 ? n : 1;
+}
+
 export async function krogerOffer(barcode: string | null, name: string): Promise<Offer | null> {
   const store = await krogerStore();
   if (!store) return null;
@@ -156,14 +163,29 @@ export async function krogerOffer(barcode: string | null, name: string): Promise
         if (product) break;
       }
     } else {
-      const body = await kroger<{ data?: KrogerProduct[] }>(`/products?filter.term=${encodeURIComponent(name.slice(0, 60))}&filter.locationId=${store.locationId}&filter.limit=5`);
-      product = body?.data?.find((p) => overlap(name, `${p.brand ?? ''} ${p.description ?? ''}`) >= 0.75);
+      const body = await kroger<{ data?: KrogerProduct[] }>(`/products?filter.term=${encodeURIComponent(name.slice(0, 60))}&filter.locationId=${store.locationId}&filter.limit=10`);
+      // All of the seller's words must be there; among those, prefer the one with the fewest extra words
+      // ("Coca-Cola Soda Cans" over "Coca-Cola Vanilla Zero Sugar Fridge Pack Cans").
+      product = (body?.data ?? [])
+        .map((p) => {
+          const label = `${p.description ?? ''} ${p.items?.[0]?.size ?? ''}`;
+          return { p, score: overlap(name, label), tight: overlap(label, name) };
+        })
+        .filter((x) => x.score >= 0.75)
+        .sort((a, b) => b.score - a.score || b.tight - a.tight)[0]?.p;
     }
     const price = product?.items?.[0]?.price;
     // The regular shelf price, not a temporary sale.
     const dollars = price?.regular || price?.promo;
     if (!product || !dollars) return null;
-    return { store: store.name || 'QFC', priceCents: Math.round(dollars * 100), title: `${product.brand ?? ''} ${product.description ?? ''} ${product.items?.[0]?.size ?? ''}`.trim(), updatedAt: Date.now(), source: 'kroger' as const };
+    const size = product.items?.[0]?.size ?? '';
+    const title = `${product.brand ?? ''} ${product.description ?? ''} ${size}`.trim();
+    // A multipack ("12 pk / 12 fl oz") for a seller selling one: use the per-unit price.
+    const count = packCount(`${size} ${product.description ?? ''}`);
+    if (count > 1 && packCount(name) <= 1) {
+      return { store: store.name || 'QFC', priceCents: Math.round((dollars * 100) / count), title: `${title} (1 of ${count})`, updatedAt: Date.now(), source: 'kroger' as const };
+    }
+    return { store: store.name || 'QFC', priceCents: Math.round(dollars * 100), title, updatedAt: Date.now(), source: 'kroger' as const };
   });
 }
 
