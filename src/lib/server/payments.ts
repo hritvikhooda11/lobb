@@ -135,32 +135,41 @@ export async function checkoutCompleted(sessionId: string) {
 
 // ── Payouts (Stripe Connect) ────────────────────────────────────────────────
 
-/** Link to Stripe's onboarding, so a neighbor can get paid to their bank. */
+/**
+ * Link to Stripe's onboarding, so a neighbor can get paid to their bank. Neighbors get an Accounts v2
+ * account with the "recipient" configuration: they only receive transfers from Lobb (Lobb charges the
+ * buyer), and they use the Express dashboard for their payout history.
+ */
 export async function payoutOnboardingUrl(userId: string, platform: Platform) {
-  const { stripe } = services();
+  const { stripe, db } = services();
   let accountId = (await accountRow(userId))?.stripe_account_id;
   if (!accountId) {
-    const account = await stripe.accounts.create(
+    const { data: profile } = await db.from('profiles').select('name').eq('id', userId).maybeSingle();
+    const account = await stripe.v2.core.accounts.create(
       {
-        type: 'express',
-        country: 'US',
-        email: await userEmail(userId),
-        business_type: 'individual',
-        capabilities: { transfers: { requested: true } },
-        business_profile: { product_description: 'Delivers items to neighbors in their building through Lobb', url: ORIGIN },
+        contact_email: await userEmail(userId),
+        display_name: profile?.name ?? 'Lobb neighbor',
+        dashboard: 'express',
+        identity: { country: 'us', entity_type: 'individual' },
+        defaults: { responsibilities: { fees_collector: 'application', losses_collector: 'application' } },
+        configuration: { recipient: { capabilities: { stripe_balance: { stripe_transfers: { requested: true } } } } },
         metadata: { user_id: userId },
       },
-      { idempotencyKey: `connect-${userId}` },
+      { idempotencyKey: `connect-v2-${userId}` },
     );
     accountId = account.id;
     await saveAccount(userId, { stripe_account_id: accountId });
   }
   const back = { flow: 'payouts', native: platform === 'native' ? '1' : '0' };
-  const link = await stripe.accountLinks.create({
+  const link = await stripe.v2.core.accountLinks.create({
     account: accountId,
-    type: 'account_onboarding',
-    refresh_url: returnUrl({ ...back, status: 'refresh' }),
-    return_url: returnUrl({ ...back, status: 'done' }),
+    use_case: {
+      type: 'account_onboarding',
+      account_onboarding: {
+        refresh_url: returnUrl({ ...back, status: 'refresh' }),
+        return_url: returnUrl({ ...back, status: 'done' }),
+      },
+    },
   });
   return link.url;
 }
@@ -178,17 +187,17 @@ export async function refreshPayoutStatus(userId: string) {
   const { stripe } = services();
   const accountId = (await accountRow(userId))?.stripe_account_id;
   if (!accountId) return { hasAccount: false, payoutsEnabled: false };
-  const account = await stripe.accounts.retrieve(accountId);
-  const payoutsEnabled = account.capabilities?.transfers === 'active' && !!account.payouts_enabled;
+  const account = await stripe.v2.core.accounts.retrieve(accountId, { include: ['configuration.recipient'] });
+  const payoutsEnabled = account.configuration?.recipient?.capabilities?.stripe_balance?.stripe_transfers?.status === 'active';
   await saveAccount(userId, { payouts_enabled: payoutsEnabled });
   return { hasAccount: true, payoutsEnabled };
 }
 
-/** account.updated webhook. */
-export async function accountUpdated(account: Stripe.Account) {
-  const userId = account.metadata?.user_id;
-  if (!userId) return;
-  await saveAccount(userId, { stripe_account_id: account.id, payouts_enabled: account.capabilities?.transfers === 'active' && !!account.payouts_enabled });
+/** A neighbor's Stripe account changed (webhook): re-check whether they can be paid. */
+export async function accountUpdated(accountId: string) {
+  const { db } = services();
+  const { data } = await db.from('payment_accounts').select('user_id').eq('stripe_account_id', accountId).maybeSingle();
+  if (data?.user_id) await refreshPayoutStatus(data.user_id);
 }
 
 // ── Settling ────────────────────────────────────────────────────────────────
