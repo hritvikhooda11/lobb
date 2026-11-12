@@ -9,7 +9,9 @@ import { useStore } from '@/store/app-store';
 import { fonts, radius, space, useTheme } from '@/theme';
 
 /** Only UW students: the database's allowed_email_domains is the real gate. */
-const isUwEmail = (e: string) => /^[^\s@]+@uw\.edu$/i.test(e.trim());
+const isUwEmail = (e: string) => /^[^\s@]+@(uw\.edu|getlobb\.com)$/i.test(e.trim());
+/** Lobb's own addresses (the App Store review account) sign in with a password, not an emailed code. */
+const isStaffEmail = (e: string) => /@getlobb\.com$/i.test(e.trim());
 
 /** Email sign-in codes are 6–8 digits (Supabase Auth → Email OTP length). */
 const CODE_MIN = 6;
@@ -19,6 +21,7 @@ export default function Onboarding() {
   const { state, actions } = useStore();
   const [email, setEmail] = useState('');
   const [code, setCode] = useState('');
+  const [password, setPassword] = useState('');
   const [codeSent, setCodeSent] = useState(false);
   const [busy, setBusy] = useState(false);
   const [communityId, setCommunityId] = useState<string | null>(state.profile?.communityId ?? null);
@@ -74,20 +77,43 @@ export default function Onboarding() {
               keyboardType="email-address"
               returnKeyType="go"
               onSubmitEditing={() => {
-                if (!isUwEmail(email) || busy) return;
+                if (!isUwEmail(email) || isStaffEmail(email) || busy) return;
                 run(() => actions.sendCode(email)).then((ok) => ok && setCodeSent(true));
               }}
               style={inputStyle(isUwEmail(email))}
             />
+            {isStaffEmail(email) ? (
+              <TextInput
+                value={password}
+                onChangeText={setPassword}
+                placeholder="Password"
+                placeholderTextColor={colors.textMuted}
+                secureTextEntry
+                autoCapitalize="none"
+                autoComplete="password"
+                returnKeyType="go"
+                onSubmitEditing={() => password && !busy && run(() => actions.signInWithPassword(email, password))}
+                style={inputStyle(password.length > 0)}
+              />
+            ) : null}
             <Txt variant="caption" tone="muted">
               Only @uw.edu addresses, so everyone in your building is a verified student. We’ll email you a sign-in code.
             </Txt>
-            <Button
-              label={busy ? 'Sending…' : 'Email me a code'}
-              disabled={!isUwEmail(email) || busy}
-              onPress={() => run(() => actions.sendCode(email)).then((ok) => ok && setCodeSent(true))}
-              style={{ marginTop: space.sm }}
-            />
+            {isStaffEmail(email) ? (
+              <Button
+                label={busy ? 'Signing in…' : 'Sign in'}
+                disabled={!password || busy}
+                onPress={() => run(() => actions.signInWithPassword(email, password))}
+                style={{ marginTop: space.sm }}
+              />
+            ) : (
+              <Button
+                label={busy ? 'Sending…' : 'Email me a code'}
+                disabled={!isUwEmail(email) || busy}
+                onPress={() => run(() => actions.sendCode(email)).then((ok) => ok && setCodeSent(true))}
+                style={{ marginTop: space.sm }}
+              />
+            )}
           </View>
         ) : null}
 

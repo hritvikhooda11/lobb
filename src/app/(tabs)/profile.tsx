@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { Pressable, Switch, View } from 'react-native';
 
 import { Button, Card, Divider, Icon, Pill, Row, Screen, SectionHeader, Txt, tap } from '@/components/ui';
-import { attempt } from '@/lib/alert';
+import { attempt, confirm } from '@/lib/alert';
 import { openPayouts } from '@/lib/pay';
 import { communities } from '@/data/catalog';
 import { ratingLabel, useStore } from '@/store/app-store';
@@ -86,6 +86,35 @@ export default function Profile() {
 
 
       <Button label="Sign out" icon="log-out-outline" kind="danger" onPress={actions.signOut} style={{ marginTop: space.md }} />
+      <Row gap={space.lg} style={{ justifyContent: 'center', marginTop: space.lg }}>
+        <Pressable onPress={() => router.push('/privacy')} hitSlop={8}>
+          <Txt variant="caption" tone="muted">
+            Privacy
+          </Txt>
+        </Pressable>
+        <Pressable onPress={() => router.push('/terms')} hitSlop={8}>
+          <Txt variant="caption" tone="muted">
+            Terms
+          </Txt>
+        </Pressable>
+        <Pressable
+          hitSlop={8}
+          onPress={async () => {
+            if (
+              !(await confirm(
+                'Delete your account?',
+                'This permanently deletes your account, listings, shout-outs, chats and photos. It can’t be undone.',
+                'Delete account',
+              ))
+            )
+              return;
+            await attempt(() => actions.deleteAccount());
+          }}>
+          <Txt variant="caption" tone="danger">
+            Delete account
+          </Txt>
+        </Pressable>
+      </Row>
     </Screen>
   );
 }

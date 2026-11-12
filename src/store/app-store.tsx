@@ -568,6 +568,11 @@ function useAppState() {
         const { error } = await supabase.auth.signInWithOtp({ email: email.trim().toLowerCase(), options: { shouldCreateUser: true } });
         if (error) throw new Error(friendlyError(error));
       },
+      /** Lobb's own @getlobb.com accounts (App Store review) sign in with a password. */
+      signInWithPassword: async (email: string, password: string) => {
+        const { error } = await supabase.auth.signInWithPassword({ email: email.trim().toLowerCase(), password });
+        if (error) throw new Error(error.message.includes('Invalid') ? 'Wrong email or password.' : friendlyError(error));
+      },
       verifyCode: async (email: string, token: string) => {
         const { error } = await supabase.auth.verifyOtp({ email: email.trim().toLowerCase(), token: token.trim(), type: 'email' });
         if (error) throw new Error(error.message.includes('expired') || error.message.includes('invalid') ? 'That code is wrong or expired.' : friendlyError(error));
@@ -577,6 +582,15 @@ function useAppState() {
         await must(supabase.rpc('set_home', { p_community: communityId, p_room: room }));
         await loadProfile(uid());
         await refreshAll();
+      },
+      /** Permanently deletes this account and its data (App Store requirement). */
+      deleteAccount: async () => {
+        const { data } = await supabase.auth.getSession();
+        const res = await fetch('/api/account/delete', { method: 'POST', headers: { Authorization: `Bearer ${data.session?.access_token ?? ''}` } });
+        const body = (await res.json().catch(() => ({}))) as { error?: string };
+        if (!res.ok) throw new Error(body.error ?? 'Couldn’t delete your account. Try again.');
+        await unregisterRemotePush().catch(() => {});
+        await supabase.auth.signOut().catch(() => {});
       },
       signOut: async () => {
         await unregisterRemotePush().catch(() => {});
