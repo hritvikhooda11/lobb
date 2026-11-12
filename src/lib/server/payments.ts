@@ -96,6 +96,15 @@ export async function createCheckout(userId: string, kind: PayKind, id: string, 
 
   const base = { kind, id, native: platform === 'native' ? '1' : '0' };
   const session = await stripe.checkout.sessions.create({
+    // Settings from Stripe Checkout Studio (see STRIPE_INTEGRATION_TODO.md).
+    ui_mode: 'hosted_page',
+    billing_address_collection: 'auto',
+    phone_number_collection: { enabled: false },
+    automatic_tax: { enabled: false },
+    allow_promotion_codes: false,
+    submit_type: 'auto',
+    integration_identifier: 'hosted_web_0001',
+    origin_context: 'web',
     mode: 'payment',
     customer: await customerFor(userId),
     line_items: lines.map((l) => ({ quantity: 1, price_data: { currency: 'usd', unit_amount: l.amount, product_data: { name: l.name } } })),
