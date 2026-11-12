@@ -22,7 +22,10 @@
     "production": {
       "ios": {
         "ascAppId": "6833926793",
-        "appleTeamId": "AKX82T38HD"
+        "appleTeamId": "AKX82T38HD",
+        "ascApiKeyPath": "./AuthKey_JTV74D3253.p8",
+        "ascApiKeyId": "JTV74D3253",
+        "ascApiKeyIssuerId": "5e9bf700-13d5-4282-a8c7-d64c06548d23"
       }
     }
   }
