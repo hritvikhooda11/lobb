@@ -239,12 +239,13 @@ function LiveBanner({ requestId }: { requestId: string }) {
   const item = useItem(r.itemId)!;
   const name = r.deliverer?.name;
   const label = {
+    pending_payment: 'Finish paying to send your order',
     open: 'Asking your neighbors…',
     accepted: `${name} is on the way`,
     arriving: r.fulfillment === 'dropoff' ? `${name} is at your door!` : r.fulfillment === 'lobby' ? `${name} is in the lobby!` : `${name} is ready for you!`,
     renting: 'You’re borrowing this',
     returning: `Returning to ${name}`,
-  }[r.status as 'open' | 'accepted' | 'arriving' | 'renting' | 'returning'];
+  }[r.status as 'pending_payment' | 'open' | 'accepted' | 'arriving' | 'renting' | 'returning'];
   return (
     <Card onPress={() => router.push({ pathname: '/request/[id]', params: { id: r.id } })} style={{ marginTop: space.lg, backgroundColor: colors.primary }}>
       <Row>

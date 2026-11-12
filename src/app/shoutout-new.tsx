@@ -201,7 +201,7 @@ export default function NewShoutout() {
         }}
       />
       <Txt variant="caption" tone="muted" center>
-        You’re only charged if a neighbor brings it. Shout-outs expire after 2 hours. No alcohol, tobacco, vapes or medication.
+        Your card is only charged if a neighbor brings it. Shout-outs expire after 2 hours. No alcohol, tobacco, vapes or medication.
       </Txt>
     </ScrollView>
   );

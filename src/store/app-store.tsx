@@ -12,13 +12,14 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { bundledItem, type CategoryId, type Item, type ItemKind } from '@/data/catalog';
 import { sellerEarnings, type Fulfillment, type PriceBreakdown } from '@/data/pricing';
 import { unregisterRemotePush } from '@/lib/notify';
+import { payFor, payoutStatus, settlePayments } from '@/lib/pay';
 import { friendlyError, publicPhotoUrl, supabase, uniqueChannel, uploadPhoto } from '@/lib/supabase';
 
 export const DELIVERY_WINDOW_MS = 10 * 60 * 1000;
 
-export type RequestStatus = 'open' | 'accepted' | 'arriving' | 'delivered' | 'renting' | 'returning' | 'returned' | 'expired' | 'cancelled';
+export type RequestStatus = 'pending_payment' | 'open' | 'accepted' | 'arriving' | 'delivered' | 'renting' | 'returning' | 'returned' | 'expired' | 'cancelled';
 
-export const LIVE_STATUSES: RequestStatus[] = ['open', 'accepted', 'arriving', 'renting', 'returning'];
+export const LIVE_STATUSES: RequestStatus[] = ['pending_payment', 'open', 'accepted', 'arriving', 'renting', 'returning'];
 
 /** `ratingCount` 0 = new (no ratings yet). */
 export type Person = { name: string; rating: number; ratingCount: number };
@@ -106,6 +107,10 @@ export type Profile = {
   age: number | null;
   /** Whether Lobb has turned on the alcohol section in this building. */
   alcoholEnabled: boolean;
+  /** Orders and shout-outs are paid by card (Stripe). Off while payments aren't set up. */
+  paymentsRequired: boolean;
+  /** This neighbor has finished Stripe payouts setup, so they can be paid. */
+  payoutsEnabled: boolean;
 };
 
 /** "Anyone have a plunger?" A request for something nobody lists. */
@@ -123,7 +128,7 @@ export type Shoutout = {
   boost: number;
   fulfillment: Fulfillment;
   rentalLabel?: string;
-  status: 'open' | 'claimed' | 'cancelled';
+  status: 'pending_payment' | 'open' | 'claimed' | 'cancelled';
   claimedBy: string | null;
   requestId: string | null;
   createdAt: number;
@@ -280,9 +285,11 @@ function useAppState() {
   // ── Loading ──────────────────────────────────────────────────────────────
 
   const loadProfile = useCallback(async (userId: string) => {
-    const [row, home] = await Promise.all([
+    const [row, home, config, payAccount] = await Promise.all([
       must(supabase.from('profiles').select('id, name, community_id, rating_avg, rating_count, reliability_score, role, notify_shoutouts').eq('id', userId).maybeSingle()),
       must(supabase.from('home_details').select('room, birthdate').eq('user_id', userId).maybeSingle()),
+      supabase.from('app_config').select('payments_required').maybeSingle(),
+      supabase.from('payment_accounts').select('payouts_enabled').eq('user_id', userId).maybeSingle(),
     ]);
     const community = row?.community_id
       ? await must(supabase.from('communities').select('alcohol_enabled').eq('id', row.community_id).maybeSingle())
@@ -301,6 +308,8 @@ function useAppState() {
           notifyShoutouts: row.notify_shoutouts,
           age: home?.birthdate ? yearsSince(home.birthdate) : null,
           alcoholEnabled: !!community?.alcohol_enabled,
+          paymentsRequired: !!config.data?.payments_required,
+          payoutsEnabled: !!payAccount.data?.payouts_enabled,
         }
       : null;
     stateRef.current = { ...stateRef.current, profile };
@@ -579,9 +588,28 @@ function useAppState() {
       createRequest: async (item: Item, locationNote: string, fulfillment: Fulfillment, durationId?: string) => {
         const request = await rpc('create_request', { p_item_id: item.id, p_location_note: locationNote, p_duration_id: durationId ?? null, p_fulfillment: fulfillment });
         await loadCatalog();
+        // Payments on: the order goes out to neighbors once the card is authorized in Stripe Checkout.
+        if (request.status === 'pending_payment') {
+          await payFor('request', request.id).catch(() => {});
+          await loadActivity();
+        }
         return request.id;
       },
-      cancelRequest: (id: string) => rpc('cancel_request', { p_id: id }),
+      cancelRequest: async (id: string) => {
+        const r = await rpc('cancel_request', { p_id: id });
+        settlePayments();
+        return r;
+      },
+      /** Open Stripe Checkout again for an order or shout-out waiting for payment. */
+      payFor: async (kind: 'request' | 'shoutout', id: string) => {
+        await payFor(kind, id);
+        await Promise.all([loadActivity(), loadShoutouts()]);
+      },
+      /** After returning from Stripe payouts setup. */
+      refreshPayouts: async () => {
+        await payoutStatus().catch(() => {});
+        await loadProfile(uid());
+      },
       startReturn: (id: string) => rpc('start_return', { p_id: id }),
       /** Buyer rates the neighbor who delivered, or the neighbor rates the buyer. Can be changed. */
       rateRequest: async (id: string, stars: number) => {
@@ -602,9 +630,13 @@ function useAppState() {
       confirmHandoff: async (id: string, code: string, photoBase64: string, idChecked = false) => {
         const path = await uploadPhoto('handoff-photos', uid(), `${id}-handoff`, photoBase64);
         await checked('confirm_handoff', { p_id: id, p_code: code, p_photo_path: path, p_id_checked: idChecked });
+        settlePayments();
         await loadListings();
       },
-      confirmReturn: (id: string, code: string) => checked('confirm_return', { p_id: id, p_code: code }),
+      confirmReturn: async (id: string, code: string) => {
+        await checked('confirm_return', { p_id: id, p_code: code });
+        settlePayments();
+      },
 
       addListing: async (itemId: string, adjustPct = 0) => {
         const existing = stateRef.current.listings.find((l) => l.itemId === itemId);
@@ -668,7 +700,7 @@ function useAppState() {
 
       // Shout-outs
       createShoutout: async (input: { text: string; kind: ItemKind; category: CategoryId; offer: number; boost: number; fulfillment: Fulfillment; note: string }) => {
-        await must(
+        const shoutout = (await must(
           supabase.rpc('create_shoutout', {
             p_text: input.text,
             p_kind: input.kind,
@@ -678,11 +710,13 @@ function useAppState() {
             p_fulfillment: input.fulfillment,
             p_note: input.note,
           }),
-        );
+        )) as DbShoutout;
+        if (shoutout.status === 'pending_payment') await payFor('shoutout', shoutout.id).catch(() => {});
         await loadShoutouts();
       },
       cancelShoutout: async (id: string) => {
         await must(supabase.rpc('cancel_shoutout', { p_id: id }));
+        settlePayments();
         await loadShoutouts();
       },
       /** "I have one": the first neighbor wins, and it becomes a delivery you've already accepted. Returns the request id. */

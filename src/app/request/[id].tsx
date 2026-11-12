@@ -14,7 +14,7 @@ import { fonts, radius, space, useTheme } from '@/theme';
 
 const goHome = () => (router.canGoBack() ? router.back() : router.replace('/'));
 
-const STEP: Record<RequestStatus, number> = { open: 0, accepted: 1, arriving: 2, delivered: 3, renting: 2, returning: 2, returned: 3, expired: 0, cancelled: 0 };
+const STEP: Record<RequestStatus, number> = { pending_payment: 0, open: 0, accepted: 1, arriving: 2, delivered: 3, renting: 2, returning: 2, returned: 3, expired: 0, cancelled: 0 };
 
 const formatDue = (ms: number) => {
   if (ms <= 0) return 'Overdue';
@@ -76,6 +76,8 @@ export default function RequestStatusScreen() {
       ) : null}
 
       <View style={{ alignItems: 'center', marginTop: space.xxl, gap: space.lg }}>
+        {r.status === 'pending_payment' ? <PayPrompt requestId={r.id} total={r.rental ? r.rental.total + r.rental.hold : r.price.total} hold={r.rental?.hold} /> : null}
+
         {r.status === 'open' ? (
           <>
             <RadarPulse emoji={item.emoji} />
@@ -172,11 +174,39 @@ export default function RequestStatusScreen() {
         ) : null}
       </View>
 
-      {r.status === 'open' || (r.status === 'accepted' && remaining <= 0) ? (
+      {r.status === 'pending_payment' || r.status === 'open' || (r.status === 'accepted' && remaining <= 0) ? (
         <Button label="Cancel request" kind="danger" onPress={() => attempt(() => actions.cancelRequest(r.id))} style={{ marginTop: space.xxl }} />
       ) : null}
 
     </Screen>
+  );
+}
+
+/** Payments on: the order only goes out to neighbors once the card is authorized. */
+function PayPrompt({ requestId, total, hold }: { requestId: string; total: number; hold?: number }) {
+  const { actions } = useStore();
+  const [busy, setBusy] = useState(false);
+  return (
+    <>
+      <StateBadge icon="card" tone="primary" />
+      <Txt variant="title" center>
+        Finish paying
+      </Txt>
+      <Txt tone="muted" center>
+        Your card is only charged when you get the item{hold ? `. The ${money(hold)} deposit is released when you return it` : ''}. Your order goes out to neighbors as soon as it’s paid.
+      </Txt>
+      <Button
+        label={busy ? 'Opening checkout…' : `Pay ${money(total)}`}
+        icon="lock-closed"
+        disabled={busy}
+        onPress={async () => {
+          setBusy(true);
+          await attempt(() => actions.payFor('request', requestId));
+          setBusy(false);
+        }}
+        style={{ alignSelf: 'stretch' }}
+      />
+    </>
   );
 }
 

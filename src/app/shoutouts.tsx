@@ -148,7 +148,9 @@ function MyShoutout({ shoutout: s, now }: { shoutout: Shoutout; now: number }) {
     <Card style={{ gap: space.md }}>
       <Header s={s} />
       <Row style={{ justifyContent: 'space-between' }}>
-        {s.status === 'open' ? (
+        {s.status === 'pending_payment' ? (
+          <Pill icon="card" label="NEEDS PAYMENT" tone="danger" />
+        ) : s.status === 'open' ? (
           <Pill icon="time" label={`WAITING · ${minutesLeft(s, now)} MIN LEFT`} tone="warning" />
         ) : s.status === 'claimed' ? (
           <Pill icon="checkmark-circle" label={live ? 'A NEIGHBOR HAS IT' : 'DONE'} tone="success" />
@@ -177,7 +179,14 @@ function MyShoutout({ shoutout: s, now }: { shoutout: Shoutout; now: number }) {
           <Icon name="chevron-forward" size={16} tone="primary" />
         </Pressable>
       ))}
-      {s.status === 'open' ? (
+      {s.status === 'pending_payment' ? (
+        <>
+          <Button label={`Pay ${money(s.offer + s.boost)} to post it`} icon="lock-closed" onPress={() => attempt(() => actions.payFor('shoutout', s.id))} />
+          <Txt variant="caption" tone="muted" center>
+            Neighbors see it once it’s paid. You’re only charged if someone brings it. Unpaid shout-outs disappear after 30 minutes.
+          </Txt>
+        </>
+      ) : s.status === 'open' ? (
         <Button
           label="Cancel shout-out"
           kind="ghost"

@@ -384,6 +384,45 @@ const arrPush = await asServer(`select * from public.push_messages('request_even
 arrPush.length > 0 && arrPush.every((m) => m.token.startsWith('ExponentPushToken[alex')) && /is in the lobby/.test(arrPush[0].title) && arrPush[0].url === `/request/${lobbyReq.id}` ? ok(`buyer is pinged: “${arrPush[0].title}”`) : bad(`arrival push ${JSON.stringify(arrPush)}`);
 await expectFail('users can’t read the event log', ids.alex, `select * from public.request_events`, [], /permission denied/);
 
+console.log('\nPayments (switched on)');
+await db.exec(`update public.requests set status = 'cancelled' where status in ('open', 'accepted', 'arriving', 'renting', 'returning')`);
+await db.exec(`update public.app_config set payments_required = true`);
+const unpaid = one(await expectOk('alex orders water (payments on)', ids.alex, `select * from public.create_request('water-16', '', null, 'lobby')`));
+unpaid?.status === 'pending_payment' ? ok('it waits for payment') : bad(`status ${unpaid?.status}`);
+(await as(ids.bri, `select id from public.requests where id = $1`, [unpaid.id])).rows.length === 0 ? ok('neighbors can’t see an unpaid order') : bad('unpaid order visible');
+await expectFail('nobody can accept it yet', ids.bri, `select public.accept_request($1)`, [unpaid.id]);
+await expectFail('users can’t mark it paid', ids.alex, `select public.payment_authorized('request', $1, 'pi_fake', 999)`, [unpaid.id], /permission denied/);
+const retry = one(await expectOk('alex starts checkout again', ids.alex, `select * from public.create_request('water-16', '', null, 'lobby')`));
+one(await db.query(`select status from public.requests where id = $1`, [unpaid.id]))?.status === 'cancelled' ? ok('the abandoned checkout is dropped') : bad('old pending kept');
+(await asServer(`select public.payment_authorized('request', $1, 'pi_old', 325) as ok`, [unpaid.id]))[0]?.ok === false ? ok('a late payment for a dropped order is refused (server cancels it)') : bad('late payment accepted');
+(await asServer(`select public.payment_authorized('request', $1, 'pi_test_1', 325) as ok`, [retry.id]))[0]?.ok === true ? ok('Stripe confirms the card → order goes live') : bad('authorize failed');
+const live = one(await db.query(`select status, payment_status from public.requests where id = $1`, [retry.id]));
+live?.status === 'open' && live?.payment_status === 'authorized' ? ok('status open, payment authorized') : bad(`live ${JSON.stringify(live)}`);
+one(await db.query(`select count(*)::int as n from public.request_events where request_id = $1 and kind = 'opened'`, [retry.id]))?.n === 1 ? ok('neighbors get pushed when it goes live') : bad('no opened event');
+(await asServer(`select * from public.payments_to_settle()`)).filter((x) => x.id === retry.id).length === 0 ? ok('nothing to charge yet') : bad('settle too early');
+await expectOk('dan accepts', ids.dan, `select public.accept_request($1)`, [retry.id]);
+await expectOk('dan verifies the seal', ids.dan, `select public.verify_seal($1, 'x/seal.jpg')`, [retry.id]);
+const payCode = one(await as(ids.alex, `select code from public.handoff_codes where request_id = $1 and purpose = 'handoff'`, [retry.id]))?.code;
+await expectOk('handoff scanned', ids.dan, `select public.confirm_handoff($1, $2, 'x/handoff.jpg')`, [retry.id, payCode]);
+const toCapture = (await asServer(`select * from public.payments_to_settle()`)).find((x) => x.id === retry.id);
+toCapture?.action === 'capture' && toCapture?.payment_intent_id === 'pi_test_1' && toCapture?.seller_id === ids.dan ? ok(`after handoff: capture $${toCapture.amount / 100}, pay dan $${toCapture.payout / 100}`) : bad(`settle ${JSON.stringify(toCapture)}`);
+
+const cancelMe = one(await as(ids.alex, `select * from public.create_request('water-16', '', null, 'lobby')`));
+await asServer(`select public.payment_authorized('request', $1, 'pi_test_2', 325)`, [cancelMe.id]);
+await expectOk('alex cancels before anyone accepts', ids.alex, `select public.cancel_request($1)`, [cancelMe.id]);
+(await asServer(`select * from public.payments_to_settle()`)).find((x) => x.id === cancelMe.id)?.action === 'cancel' ? ok('cancelled order → hold released') : bad('cancel not settled');
+
+const paidShout = one(await expectOk('alex posts a shout-out (payments on)', ids.alex, `select * from public.create_shoutout('Phone stand', 'buy', 'electronics', 500)`));
+paidShout?.status === 'pending_payment' ? ok('shout-out waits for payment') : bad(`shout status ${paidShout?.status}`);
+(await as(ids.bri, `select id from public.shoutouts where id = $1`, [paidShout.id])).rows.length === 0 ? ok('the building can’t see it until it’s paid') : bad('unpaid shout-out visible');
+await asServer(`select public.payment_authorized('shoutout', $1, 'pi_test_3', 500)`, [paidShout.id]);
+(await as(ids.bri, `select id from public.shoutouts where id = $1`, [paidShout.id])).rows.length === 1 ? ok('paid → the building sees it') : bad('paid shout-out hidden');
+const shoutReq = one(await expectOk('bri claims it', ids.bri, `select * from public.claim_shoutout($1)`, [paidShout.id]));
+const carried = one(await db.query(`select payment_intent_id, payment_status from public.requests where id = $1`, [shoutReq.id]));
+carried?.payment_intent_id === 'pi_test_3' && carried?.payment_status === 'authorized' ? ok('the shout-out’s payment moves to the order') : bad(`carried ${JSON.stringify(carried)}`);
+(await asServer(`select * from public.payments_to_settle()`)).some((x) => x.payment_intent_id === 'pi_test_3' && x.action === 'cancel') ? bad('claimed shout-out payment would be cancelled') : ok('a claimed shout-out’s payment isn’t cancelled');
+await db.exec(`update public.app_config set payments_required = false`);
+
 console.log('\nRegistered sellers');
 await db.exec(`insert into public.seller_invites (code, note) values ('LOBBTEST1', 'test')`);
 (await as(ids.bri, `select * from public.seller_invites`).catch(() => ({ rows: [] }))).rows.length === 0 ? ok('invite codes are hidden from users') : bad('invite codes readable');

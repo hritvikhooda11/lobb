@@ -1,8 +1,10 @@
 import { router } from 'expo-router';
+import { useState } from 'react';
 import { Pressable, Switch, View } from 'react-native';
 
 import { Button, Card, Divider, Icon, Pill, Row, Screen, SectionHeader, Txt, tap } from '@/components/ui';
 import { attempt } from '@/lib/alert';
+import { openPayouts } from '@/lib/pay';
 import { communities } from '@/data/catalog';
 import { ratingLabel, useStore } from '@/store/app-store';
 import { space, useTheme } from '@/theme';
@@ -49,9 +51,9 @@ export default function Profile() {
         <Divider />
         <SettingRow label="Room" value={user.room ?? ''} />
         <Divider />
-        <SettingRow label="Payment method" value="Add card" />
+        <SettingRow label="Payment" value={user.paymentsRequired ? 'Card or Apple Pay at checkout' : 'Free while Lobb is in testing'} />
         <Divider />
-        <SettingRow label="Payout account" value="Connect bank" />
+        <PayoutRow />
         <Divider />
         <SettingRow label="Age" value={user.age !== null ? (user.age >= 21 ? '21+ confirmed' : 'Under 21') : 'Not confirmed'} />
         <Divider />
@@ -104,6 +106,33 @@ function SellerSection() {
       <Txt variant="label" tone="primary">
         {user.isSeller ? `Quick stock${stocked ? ` · ${stocked} in stock` : ''}` : 'Wholesale seller? Enter your code'}
       </Txt>
+    </Pressable>
+  );
+}
+
+/** Neighbors get paid to their bank through Stripe. */
+function PayoutRow() {
+  const { state, actions } = useStore();
+  const [busy, setBusy] = useState(false);
+  const enabled = !!state.profile?.payoutsEnabled;
+  return (
+    <Pressable
+      disabled={busy}
+      onPress={async () => {
+        setBusy(true);
+        await attempt(async () => {
+          await openPayouts(enabled ? 'dashboard' : 'onboard');
+          await actions.refreshPayouts();
+        });
+        setBusy(false);
+      }}>
+      <Row style={{ justifyContent: 'space-between' }}>
+        <Txt>Payouts</Txt>
+        <Row gap={4}>
+          <Txt tone={enabled ? 'success' : 'primary'}>{busy ? 'Opening Stripe…' : enabled ? 'Bank connected' : 'Set up to get paid'}</Txt>
+          <Icon name="chevron-forward" size={16} tone="muted" />
+        </Row>
+      </Row>
     </Pressable>
   );
 }

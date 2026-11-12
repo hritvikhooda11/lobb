@@ -7,6 +7,7 @@ import { useStore, type RequestStatus } from '@/store/app-store';
 import { space } from '@/theme';
 
 const statusPill: Record<RequestStatus, { label: string; tone: 'primary' | 'warning' | 'success' | 'danger' | 'default' }> = {
+  pending_payment: { label: 'Needs payment', tone: 'danger' },
   open: { label: 'Finding neighbor', tone: 'warning' },
   accepted: { label: 'On the way', tone: 'primary' },
   arriving: { label: 'At your door', tone: 'primary' },
