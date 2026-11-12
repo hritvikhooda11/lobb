@@ -8,21 +8,8 @@ import { attempt } from '@/lib/alert';
 import { useStore } from '@/store/app-store';
 import { fonts, radius, space, useTheme } from '@/theme';
 
-// Release builds only accept @uw.edu. Dev builds accept any address so test domains
-// can be allowed temporarily; the database's allowed_email_domains is the real gate.
-/** Demo mode (dev builds + EXPO_PUBLIC_DEMO_LOGIN=1): the main button signs in instantly, no email. */
-const DEMO_LOGIN = __DEV__ && process.env.EXPO_PUBLIC_DEMO_LOGIN === '1';
-
-/** Dev/demo only: asks the server (LOBB_DEV_LOGIN=1) for a sign-in code instead of emailing it. */
-async function devSignIn(email: string, verify: (email: string, code: string) => Promise<void>) {
-  const res = await fetch('/api/dev-code', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email }) });
-  const body = (await res.json().catch(() => ({}))) as { code?: string; error?: string };
-  if (!res.ok || !body.code) throw new Error(res.status === 404 ? 'Dev sign-in is off. Set LOBB_DEV_LOGIN=1 in .env and restart.' : (body.error ?? 'Dev sign-in failed'));
-  await verify(email, body.code);
-}
-
-const isUwEmail = (e: string) => (__DEV__ ? /^[^\s@]+@[^\s@]+\.[^\s@]+$/ : /^[^\s@]+@uw\.edu$/i).test(e.trim());
-
+/** Only UW students: the database's allowed_email_domains is the real gate. */
+const isUwEmail = (e: string) => /^[^\s@]+@uw\.edu$/i.test(e.trim());
 
 /** Email sign-in codes are 6–8 digits (Supabase Auth → Email OTP length). */
 const CODE_MIN = 6;
@@ -88,33 +75,19 @@ export default function Onboarding() {
               returnKeyType="go"
               onSubmitEditing={() => {
                 if (!isUwEmail(email) || busy) return;
-                if (DEMO_LOGIN) run(() => devSignIn(email, actions.verifyCode));
-                else run(() => actions.sendCode(email)).then((ok) => ok && setCodeSent(true));
+                run(() => actions.sendCode(email)).then((ok) => ok && setCodeSent(true));
               }}
               style={inputStyle(isUwEmail(email))}
             />
             <Txt variant="caption" tone="muted">
-              Only @uw.edu addresses, so everyone in your building is a verified student.{DEMO_LOGIN ? '' : ' We’ll email you a sign-in code.'}
+              Only @uw.edu addresses, so everyone in your building is a verified student. We’ll email you a sign-in code.
             </Txt>
             <Button
-              label={busy ? (DEMO_LOGIN ? 'Signing in…' : 'Sending…') : DEMO_LOGIN ? 'Continue' : 'Email me a code'}
+              label={busy ? 'Sending…' : 'Email me a code'}
               disabled={!isUwEmail(email) || busy}
-              onPress={() =>
-                DEMO_LOGIN ? run(() => devSignIn(email, actions.verifyCode)) : run(() => actions.sendCode(email)).then((ok) => ok && setCodeSent(true))
-              }
+              onPress={() => run(() => actions.sendCode(email)).then((ok) => ok && setCodeSent(true))}
               style={{ marginTop: space.sm }}
             />
-            {__DEV__ && !DEMO_LOGIN ? (
-              <Pressable
-                disabled={!isUwEmail(email) || busy}
-                onPress={() => run(() => devSignIn(email, actions.verifyCode))}
-                hitSlop={8}
-                style={{ alignSelf: 'center', opacity: isUwEmail(email) ? 1 : 0.4 }}>
-                <Txt variant="caption" tone="primary">
-                  Dev: sign in without email
-                </Txt>
-              </Pressable>
-            ) : null}
           </View>
         ) : null}
 

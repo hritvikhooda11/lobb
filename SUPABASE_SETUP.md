@@ -90,7 +90,7 @@ npx supabase functions deploy push --no-verify-jwt
 What gets sent: shout-outs go to everyone else in the building with shout-out alerts on; new orders go to neighbors who list the item and have it in stock (alcohol only to admins). Who and what is decided in SQL (`public.push_messages`) and covered by `npm run test:db`. Payloads contain first names, item names and prices, never room numbers or birthdates. Phones that uninstall Lobb are removed automatically.
 
 ## Testing with two people
-You need two accounts in the same building. Easiest: a friend with a UW email. In a **dev build** you can also use the dev sign-in (`LOBB_DEV_LOGIN=1` + `EXPO_PUBLIC_DEMO_LOGIN=1` in `.env`), which signs in without sending an email. It only works on your laptop's dev server; production builds and the hosted API return 404 for it.
+You need two accounts in the same building. Easiest: a friend with a UW email.
 
 Without a second UW email you can temporarily allow another domain in **SQL Editor**:
 
@@ -147,7 +147,7 @@ delete from public.allowed_email_domains where domain = 'gmail.com';
 9. Nothing changes in the app: Supabase sends the email, the app only asks for and checks the code. Test: sign in on the web preview with your `@uw.edu` address. The code should arrive within a minute (check UW's quarantine at first; DMARC helps). Resend → **Emails** shows each delivery.
 
 ### 7b. Host the API routes (EAS Hosting)
-`/api/price`, `/api/barcode` and `/api/identify` run on the server (they hold keys). In development they run on your laptop; a phone away from your Wi-Fi can't reach that. EAS Hosting runs them at `https://lobb.expo.app`, which `app.json` already points the app at (`expo-router` plugin `origin`). The dev-only routes (`/api/dev-code`, `/api/dev-reset`) always return 404 there.
+`/api/price`, `/api/barcode` and `/api/identify` run on the server (they hold keys). In development they run on your laptop; a phone away from your Wi-Fi can't reach that. EAS Hosting runs them at `https://lobb.expo.app`, which `app.json` already points the app at (`expo-router` plugin `origin`).
 
 1. **(you)** Create a free account at expo.dev, then in the `lobb` folder:
 
@@ -168,7 +168,7 @@ npx eas-cli@latest init
 | `KROGER_CLIENT_ID`, `KROGER_CLIENT_SECRET` | developer.kroger.com (free) |
 | `KROGER_ZIP` | `98105` |
 
-   Also add `EXPO_PUBLIC_SUPABASE_URL` and `EXPO_PUBLIC_SUPABASE_KEY` (visibility **Plain text**) for **production** and **preview**: EAS Build doesn't upload your `.env`, so the app build reads them from here. **Never add `LOBB_DEV_LOGIN` or `EXPO_PUBLIC_DEMO_LOGIN` to production.**
+   Also add `EXPO_PUBLIC_SUPABASE_URL` and `EXPO_PUBLIC_SUPABASE_KEY` (visibility **Plain text**) for **production** and **preview**: EAS Build doesn't upload your `.env`, so the app build reads them from here.
 
 3. Deploy:
 

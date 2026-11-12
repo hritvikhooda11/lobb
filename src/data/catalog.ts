@@ -25,10 +25,12 @@ export const categories: Category[] = [
   { id: 'toiletries', label: 'Toiletries', emoji: '🧴', edible: false },
   { id: 'electronics', label: 'Tech', emoji: '🔌', edible: false },
   { id: 'household', label: 'Household', emoji: '🧻', edible: false },
-  { id: 'alcohol', label: 'Alcohol 21+', emoji: '🍺', edible: true, ageRestricted: true },
 ];
 
-export const getCategory = (id: CategoryId) => categories.find((c) => c.id === id)!;
+/** Alcohol is off for launch (App Store rules and WA liquor law). The 21+ code paths stay for licensed partner stores later. */
+const ALCOHOL_CATEGORY: Category = { id: 'alcohol', label: 'Alcohol 21+', emoji: '🍺', edible: true, ageRestricted: true };
+
+export const getCategory = (id: CategoryId) => categories.find((c) => c.id === id) ?? ALCOHOL_CATEGORY;
 
 /** Rentals: anything non-edible except toiletries (hygiene). */
 export const canRent = (category: CategoryId) => !getCategory(category).edible && category !== 'toiletries';
@@ -52,7 +54,7 @@ export type Item = {
   realPhoto?: ImageSource;
   /** Retail market price in cents (looked up from retail sources in production). */
   marketPrice: number;
-  /** How many neighbors in your community have this listed right now (mock). */
+  /** How many neighbors in your building have this listed right now (from the database). */
   nearbyCount: number;
   /** Set when a user added this item themselves. */
   addedByMe?: boolean;
@@ -95,13 +97,13 @@ export const catalog: Item[] = [
 /** The bundled photo/emoji for a seeded catalog item (the database stores everything else). */
 export const bundledItem = (id: string) => catalog.find((i) => i.id === id);
 
-export type Community = { id: string; name: string; type: 'dorm' | 'high-rise' | 'apartment'; members: number };
+export type Community = { id: string; name: string; type: 'dorm' | 'high-rise' | 'apartment' };
 
 export const communities: Community[] = [
-  { id: 'standard', name: 'The Standard', type: 'high-rise', members: 412 },
-  { id: 'west-campus', name: 'West Campus Dorms', type: 'dorm', members: 1260 },
-  { id: 'north-campus', name: 'North Campus Dorms', type: 'dorm', members: 980 },
-  { id: 'm-housing', name: 'M Housing', type: 'apartment', members: 230 },
+  { id: 'standard', name: 'The Standard', type: 'high-rise' },
+  { id: 'west-campus', name: 'West Campus Dorms', type: 'dorm' },
+  { id: 'north-campus', name: 'North Campus Dorms', type: 'dorm' },
+  { id: 'm-housing', name: 'M Housing', type: 'apartment' },
 ];
 
 const normalize = (s: string) =>

@@ -2,12 +2,11 @@ import { router } from 'expo-router';
 import { Pressable, Switch, View } from 'react-native';
 
 import { Button, Card, Divider, Icon, Pill, Row, Screen, SectionHeader, Txt, tap } from '@/components/ui';
-import { attempt, confirm } from '@/lib/alert';
+import { attempt } from '@/lib/alert';
 import { communities } from '@/data/catalog';
 import { ratingLabel, useStore } from '@/store/app-store';
 import { space, useTheme } from '@/theme';
 
-const DEMO_TOOLS = __DEV__ && process.env.EXPO_PUBLIC_DEMO_LOGIN === '1';
 
 export default function Profile() {
   const { colors } = useTheme();
@@ -83,20 +82,6 @@ export default function Profile() {
         Lobb only sells factory-sealed, shelf-stable items and rents non-food items. Alcohol is 21+ only, sold by Lobb-verified sellers who check ID at the door. No tobacco, vapes, or medication.
       </Txt>
 
-      {DEMO_TOOLS ? (
-        <>
-          <SectionHeader title="Demo tools" subtitle="Only on your dev server" />
-          <Button
-            label="Reset demo"
-            icon="refresh"
-            kind="ghost"
-            onPress={async () => {
-              if (!(await confirm('Reset demo?', 'Clears this account’s requests, deliveries and listings so you can run the demo again.', 'Reset'))) return;
-              if (await attempt(() => actions.resetDemo())) router.replace('/');
-            }}
-          />
-        </>
-      ) : null}
 
       <Button label="Sign out" icon="log-out-outline" kind="danger" onPress={actions.signOut} style={{ marginTop: space.md }} />
     </Screen>
