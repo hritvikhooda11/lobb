@@ -171,7 +171,7 @@ export default function ConfirmRequest() {
         <Txt variant="caption" tone="muted" style={{ marginTop: space.sm }}>
           {rent
             ? `We place a ${money(rental.hold)} hold on your card while you have it. It's released as soon as you return it.`
-            : 'Prices are set by Lobb from retail prices. You’re only charged once a neighbor accepts.'}
+            : 'Prices are set by Lobb from retail prices. Your card is held at checkout and only charged when you get the item.'}
         </Txt>
         <PriceSource item={item} />
       </View>

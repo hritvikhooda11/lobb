@@ -55,7 +55,7 @@ export default function Profile() {
         <Divider />
         <PayoutRow />
         <Divider />
-        <SettingRow label="Age" value={user.age !== null ? (user.age >= 21 ? '21+ confirmed' : 'Under 21') : 'Not confirmed'} />
+        <SettingRow label="Age" value={user.termsAccepted ? '18+ confirmed' : 'Not confirmed'} />
         <Divider />
         <Row style={{ justifyContent: 'space-between' }}>
           <View style={{ flex: 1 }}>

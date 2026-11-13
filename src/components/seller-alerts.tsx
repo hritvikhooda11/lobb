@@ -110,6 +110,8 @@ export function SellerAlerts() {
     <>
       <Animated.View
         pointerEvents={showBanner ? 'auto' : 'none'}
+        accessibilityElementsHidden={!showBanner}
+        importantForAccessibility={showBanner ? 'auto' : 'no-hide-descendants'}
         style={{
           position: 'absolute',
           top: 0,

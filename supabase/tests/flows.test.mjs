@@ -421,6 +421,12 @@ const shoutReq = one(await expectOk('bri claims it', ids.bri, `select * from pub
 const carried = one(await db.query(`select payment_intent_id, payment_status from public.requests where id = $1`, [shoutReq.id]));
 carried?.payment_intent_id === 'pi_test_3' && carried?.payment_status === 'authorized' ? ok('the shout-out’s payment moves to the order') : bad(`carried ${JSON.stringify(carried)}`);
 (await asServer(`select * from public.payments_to_settle()`)).some((x) => x.payment_intent_id === 'pi_test_3' && x.action === 'cancel') ? bad('claimed shout-out payment would be cancelled') : ok('a claimed shout-out’s payment isn’t cancelled');
+await db.exec(`update public.requests set status = 'cancelled' where status in ('open', 'accepted', 'arriving', 'renting', 'returning')`);
+const unpaidAgain = one(await as(ids.alex, `select * from public.create_request('water-16', '', null, 'lobby')`));
+await expectOk('alex cancels an order he hasn’t paid for', ids.alex, `select public.cancel_request($1)`, [unpaidAgain.id]);
+const unpaidShout = one(await as(ids.alex, `select * from public.create_shoutout('Desk lamp', 'buy', 'household', 500)`));
+await expectOk('alex cancels a shout-out he hasn’t paid for', ids.alex, `select public.cancel_shoutout($1)`, [unpaidShout.id]);
+await expectFail('bri can’t cancel alex’s unpaid order', ids.bri, `select public.cancel_request($1)`, [one(await as(ids.alex, `select * from public.create_request('water-16', '', null, 'lobby')`)).id]);
 await db.exec(`update public.app_config set payments_required = false`);
 
 console.log('\nReports and blocking');

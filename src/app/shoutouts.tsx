@@ -192,6 +192,7 @@ function MyShoutout({ shoutout: s, now }: { shoutout: Shoutout; now: number }) {
           <Txt variant="caption" tone="muted" center>
             Neighbors see it once it’s paid. You’re only charged if someone brings it. Unpaid shout-outs disappear after 30 minutes.
           </Txt>
+          <Button label="Cancel shout-out" kind="ghost" onPress={() => attempt(() => actions.cancelShoutout(s.id))} />
         </>
       ) : s.status === 'open' ? (
         <Button

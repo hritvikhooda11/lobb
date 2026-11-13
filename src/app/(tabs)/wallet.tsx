@@ -1,8 +1,11 @@
 import { LinearGradient } from 'expo-linear-gradient';
+import { useState } from 'react';
 import { View } from 'react-native';
 
 import { Button, Card, Divider, Icon, Row, Screen, SectionHeader, StateBadge, Txt } from '@/components/ui';
 import { money } from '@/data/pricing';
+import { attempt } from '@/lib/alert';
+import { openPayouts } from '@/lib/pay';
 import { useStore } from '@/store/app-store';
 import { radius, space, useTheme } from '@/theme';
 
@@ -16,7 +19,9 @@ const when = (at: number) => {
 
 export default function Wallet() {
   const { colors } = useTheme();
-  const { state } = useStore();
+  const { state, actions } = useStore();
+  const [opening, setOpening] = useState(false);
+  const payoutsOn = !!state.profile?.payoutsEnabled;
   // Earned = money from selling and lending; spent = what you paid as a buyer or renter.
   const earned = state.wallet.filter((w) => w.kind === 'earn').reduce((s, w) => s + w.amount, 0);
   const spent = state.wallet.filter((w) => w.kind === 'spend').reduce((s, w) => s - w.amount, 0);
@@ -30,16 +35,32 @@ export default function Wallet() {
         end={{ x: 1, y: 1 }}
         style={{ borderRadius: radius.xl, padding: space.xl, marginTop: space.lg }}>
         <Txt variant="caption" tone="onPrimary" style={{ opacity: 0.75 }}>
-          AVAILABLE TO CASH OUT
+          EARNED ON LOBB
         </Txt>
         <Txt variant="hero" tone="onPrimary" style={{ fontSize: 48, lineHeight: 54 }}>
           {money(earned)}
         </Txt>
         <Row style={{ marginTop: space.lg }}>
-          <Button label="Cash out" kind="accent" icon="cash" onPress={() => {}} style={{ flex: 1, height: 48 }} />
+          <Button
+            label={opening ? 'Opening Stripe…' : payoutsOn ? 'Manage payouts' : 'Set up payouts'}
+            kind="accent"
+            icon="cash"
+            disabled={opening}
+            onPress={async () => {
+              setOpening(true);
+              await attempt(async () => {
+                await openPayouts(payoutsOn ? 'dashboard' : 'onboard');
+                await actions.refreshPayouts();
+              });
+              setOpening(false);
+            }}
+            style={{ flex: 1, height: 48 }}
+          />
         </Row>
         <Txt variant="caption" tone="onPrimary" style={{ opacity: 0.7, marginTop: space.sm }}>
-          Payouts go to your bank via Stripe. Coming soon.
+          {payoutsOn
+            ? 'What you earn is sent to your bank automatically through Stripe after each handoff.'
+            : 'Connect your bank with Stripe to get paid for what you sell and lend.'}
         </Txt>
       </LinearGradient>
 
