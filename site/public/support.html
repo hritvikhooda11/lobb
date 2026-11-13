@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Lobb Support</title>
+  <meta name="description" content="Lobb is the marketplace for UW students in the same building. Snacks, drinks, chargers and things to borrow, from a neighbor, at your door in minutes.">
+  <meta name="theme-color" content="#16111F">
+  <meta property="og:title" content="Lobb · From the neighbor down the hall">
+  <meta property="og:description" content="Snacks, drinks, chargers and things to borrow, from a neighbor in your building, in minutes.">
+  <meta property="og:image" content="https://getlobb.com/icon.png">
+  <link rel="icon" href="/favicon.png">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #16111F; --surface: #221B30; --surface-high: #2E2541; --border: #3D3354;
+      --text: #F5F2FF; --muted: #BDB4D6; --violet: #9B6BFF; --violet-deep: #6D3CF0; --lime: #C8FF3D; --ink: #0D0A14;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+    body { background: var(--bg); color: var(--text); font-family: Inter, -apple-system, system-ui, sans-serif; line-height: 1.55; -webkit-font-smoothing: antialiased; }
+    a { color: inherit; }
+    .wrap { max-width: 1080px; margin: 0 auto; padding: 0 24px; }
+    h1, h2, h3, .logo { font-family: 'Space Grotesk', sans-serif; letter-spacing: -0.02em; }
+
+    nav { display: flex; align-items: center; justify-content: space-between; padding: 22px 0; }
+    .logo { display: flex; align-items: center; gap: 10px; font-size: 26px; font-weight: 700; text-decoration: none; }
+    .logo img { width: 36px; height: 36px; border-radius: 9px; }
+    .dot { color: var(--lime); }
+    .nav-cta { font-weight: 600; font-size: 15px; text-decoration: none; color: var(--ink); background: var(--lime); padding: 10px 18px; border-radius: 999px; }
+
+    .hero { position: relative; padding: 64px 0 88px; display: grid; grid-template-columns: 1.15fr 0.85fr; gap: 48px; align-items: center; }
+    .hero::before { content: ''; position: absolute; inset: -120px -200px auto auto; width: 620px; height: 620px; background: radial-gradient(circle, rgba(155,107,255,0.35), transparent 65%); z-index: -1; }
+    .badge { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; color: var(--lime); background: rgba(200,255,61,0.12); padding: 6px 12px; border-radius: 999px; margin-bottom: 22px; }
+    .badge::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: var(--lime); }
+    h1 { font-size: clamp(44px, 7vw, 76px); line-height: 1.02; font-weight: 700; }
+    h1 em { font-style: normal; color: var(--violet); }
+    .lede { margin-top: 22px; font-size: 19px; color: var(--muted); max-width: 520px; }
+    .ctas { margin-top: 34px; display: flex; gap: 12px; flex-wrap: wrap; }
+    .btn { display: inline-flex; align-items: center; gap: 10px; padding: 15px 24px; border-radius: 16px; font-weight: 600; font-size: 16px; text-decoration: none; transition: transform .15s ease; }
+    .btn:hover { transform: translateY(-2px); }
+    .btn-primary { background: var(--violet-deep); color: #fff; box-shadow: 0 10px 30px rgba(109,60,240,0.45); }
+    .btn-ghost { background: var(--surface-high); color: var(--text); }
+    .fine { margin-top: 14px; font-size: 13px; color: var(--muted); }
+
+    .phone { justify-self: center; width: 290px; border-radius: 44px; padding: 14px; background: linear-gradient(160deg, #3a2d58, #1b1428); box-shadow: 0 40px 80px rgba(0,0,0,0.5), inset 0 0 0 1px rgba(255,255,255,0.08); transform: rotate(3deg); }
+    .screen { border-radius: 32px; background: var(--bg); padding: 22px 16px; min-height: 520px; display: flex; flex-direction: column; gap: 12px; }
+    .screen .top { font-size: 12px; color: var(--muted); }
+    .screen .bld { font-family: 'Space Grotesk'; font-size: 18px; font-weight: 700; }
+    .banner { border-radius: 18px; padding: 16px; background: linear-gradient(135deg, #8B5CF6, #FF5DA2); }
+    .banner b { font-family: 'Space Grotesk'; display: block; font-size: 15px; }
+    .banner span { font-size: 12px; opacity: .9; }
+    .tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .tile { border-radius: 14px; background: var(--surface); padding: 12px; border: 1px solid var(--border); }
+    .tile .emoji { font-size: 28px; }
+    .tile .price { font-family: 'Space Grotesk'; font-weight: 700; margin-top: 6px; }
+    .tile .name { font-size: 12px; color: var(--muted); }
+    .eta { display: inline-block; font-size: 10px; font-weight: 700; color: var(--lime); background: rgba(0,0,0,.4); padding: 2px 6px; border-radius: 999px; }
+    .live { margin-top: auto; border-radius: 16px; background: var(--violet-deep); padding: 14px; font-size: 13px; font-weight: 600; }
+
+    section { padding: 72px 0; }
+    .eyebrow { color: var(--lime); font-weight: 600; font-size: 14px; letter-spacing: .04em; text-transform: uppercase; }
+    h2 { font-size: clamp(30px, 4.4vw, 44px); margin-top: 10px; line-height: 1.1; }
+    .steps { margin-top: 40px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
+    .card { background: var(--surface); border: 1px solid var(--border); border-radius: 22px; padding: 26px; }
+    .num { width: 38px; height: 38px; border-radius: 12px; background: rgba(155,107,255,.2); color: var(--violet); font-family: 'Space Grotesk'; font-weight: 700; display: grid; place-items: center; }
+    .card h3 { margin-top: 16px; font-size: 21px; }
+    .card p { margin-top: 8px; color: var(--muted); font-size: 15px; }
+
+    .split { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-top: 40px; }
+    .earn { background: linear-gradient(135deg, rgba(200,255,61,.14), rgba(200,255,61,.03)); border-color: rgba(200,255,61,.3); }
+    .earn .big { font-family: 'Space Grotesk'; font-size: 40px; font-weight: 700; color: var(--lime); }
+    ul.checks { list-style: none; margin-top: 14px; display: grid; gap: 10px; }
+    ul.checks li { padding-left: 28px; position: relative; color: var(--muted); }
+    ul.checks li::before { content: '✓'; position: absolute; left: 0; color: var(--lime); font-weight: 700; }
+
+    .final { text-align: center; background: radial-gradient(ellipse at center, rgba(155,107,255,.25), transparent 70%); }
+    .final p { color: var(--muted); margin-top: 12px; font-size: 17px; }
+    .final .ctas { justify-content: center; }
+
+    footer { border-top: 1px solid var(--border); padding: 28px 0 40px; color: var(--muted); font-size: 14px; }
+    footer .wrap { display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+    footer a { color: var(--muted); margin-left: 18px; text-decoration: none; }
+    footer a:hover { color: var(--text); }
+
+    @media (max-width: 860px) {
+      .hero { grid-template-columns: 1fr; padding: 32px 0 56px; }
+      .phone { transform: none; width: 270px; }
+      .steps, .split { grid-template-columns: 1fr; }
+      section { padding: 52px 0; }
+      footer a { margin: 0 16px 0 0; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <nav>
+      <a class="logo" href="/"><img src="/icon.png" alt=""><span>lobb<span class="dot">.</span></span></a>
+      <a class="nav-cta" href="mailto:support@getlobb.com">Email us</a>
+    </nav>
+    <section style="padding-top:32px">
+      <span class="eyebrow">Support</span>
+      <h2>How can we help?</h2>
+      <p class="lede">Email <a href="mailto:support@getlobb.com"><b>support@getlobb.com</b></a>. We reply within 24 hours, usually much faster.</p>
+      <div class="steps" style="grid-template-columns:1fr 1fr">
+        <div class="card"><h3>Problem with an order</h3><p>Open the order in the app and tap <b>Report it</b>, or use Account → Report a problem. If you were charged for something you didn’t get, we’ll refund you.</p></div>
+        <div class="card"><h3>Report or block someone</h3><p>Tap the flag in a chat, on a shout-out, or on an order. You can block them right there. Manage blocked people in Account → Blocked people. We review every report within 24 hours.</p></div>
+        <div class="card"><h3>Payments and payouts</h3><p>Your card is held when you order and charged only when you get the item. Neighbors get paid through Stripe: set it up in Account → Payouts.</p></div>
+        <div class="card"><h3>Delete your account</h3><p>In the app: Account → Delete account. It removes your profile, listings, shout-outs, chats and photos right away. Can’t sign in? Email us from your UW address and we’ll delete it for you.</p></div>
+        <div class="card"><h3>Who can join</h3><p>UW students 18 and older living in a building Lobb supports. Sign in with your @uw.edu email; we send you a code, no password.</p></div>
+        <div class="card"><h3>What can be sold</h3><p>New, factory-sealed, shelf-stable items, and non-food items to lend. Never alcohol, tobacco or vapes, cannabis, supplements, medication or weapons.</p></div>
+      </div>
+    </section>
+  </div>
+  <footer>
+    <div class="wrap">
+      <span>© 2026 Lobb · Made at UW</span>
+      <span><a href="/privacy">Privacy</a><a href="/terms">Terms</a><a href="mailto:support@getlobb.com">support@getlobb.com</a></span>
+    </div>
+  </footer>
+</body>
+</html>
