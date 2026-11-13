@@ -10,7 +10,8 @@ const migration = readdirSync(dir)
   .sort()
   .map((f) => readFileSync(new URL(f, dir), 'utf8'))
   .join('\n')
-  .replace('create extension if not exists pg_cron;', '-- pg_cron stubbed');
+  .replace('create extension if not exists pg_cron;', '-- pg_cron stubbed')
+  .replace('create extension if not exists pg_net;', '-- pg_net stubbed');
 const db = new PGlite({ extensions: { pgcrypto } });
 
 const SUPABASE_STUBS = `
@@ -26,6 +27,8 @@ create table storage.objects (id uuid primary key default gen_random_uuid(), buc
 alter table storage.objects enable row level security;
 create function storage.foldername(name text) returns text[] language sql immutable as $$ select string_to_array(name, '/') $$;
 create function cron.schedule(a text, b text, c text) returns bigint language sql as $$ select 1::bigint $$;
+create schema net;
+create function net.http_post(url text, body jsonb default '{}', params jsonb default '{}', headers jsonb default '{}', timeout_milliseconds int default 5000) returns bigint language sql as $$ select 1::bigint $$;
 create publication supabase_realtime;
 `;
 
