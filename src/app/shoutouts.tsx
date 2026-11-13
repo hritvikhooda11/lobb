@@ -116,6 +116,13 @@ function OpenShoutout({ shoutout: s, blocked, now }: { shoutout: Shoutout; block
           Ask {s.posterName.split(' ')[0]} a question
         </Txt>
       </Pressable>
+      <Pressable
+        accessibilityRole="button"
+        onPress={() => router.push({ pathname: '/report', params: { type: 'shoutout', id: s.id, user: s.userId, name: s.posterName } })}
+        hitSlop={6}
+        style={{ position: 'absolute', top: space.lg, right: space.lg }}>
+        <Icon name="flag-outline" size={18} tone="muted" />
+      </Pressable>
       <Button
         label={busy ? 'Claiming…' : blocked ? 'Finish your current delivery first' : s.kind === 'rent' ? 'I can lend one' : 'I have one'}
         icon={blocked ? undefined : 'hand-right'}

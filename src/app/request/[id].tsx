@@ -144,8 +144,8 @@ export default function RequestStatusScreen() {
 
         {r.status === 'returning' ? <HandoffQR code={r.code} title={`Hand it back to ${name}`} body={`${name} scans this to confirm the return. Then your hold is released.`} /> : null}
 
-        {r.status === 'delivered' ? <Done requestId={r.id} name={name} rated={r.rating} title="Delivered!" /> : null}
-        {r.status === 'returned' ? <Done requestId={r.id} name={name} rated={r.rating} title="Returned!" subtitle={`Your ${money(r.rental!.hold)} hold is released.`} /> : null}
+        {r.status === 'delivered' ? <Done requestId={r.id} name={name} rated={r.rating} title="Delivered!" delivererId={r.deliverer?.id} /> : null}
+        {r.status === 'returned' ? <Done requestId={r.id} name={name} rated={r.rating} delivererId={r.deliverer?.id} title="Returned!" subtitle={`Your ${money(r.rental!.hold)} hold is released.`} /> : null}
 
         {r.status === 'expired' ? (
           <>
@@ -313,7 +313,7 @@ function HandoffQR({ code, title, body }: { code?: string; title: string; body: 
   );
 }
 
-function Done({ requestId, name, rated, title, subtitle }: { requestId: string; name: string; rated?: number; title: string; subtitle?: string }) {
+function Done({ requestId, name, rated, title, subtitle, delivererId }: { requestId: string; name: string; rated?: number; title: string; subtitle?: string; delivererId?: string }) {
   const { colors } = useTheme();
   const { actions } = useStore();
   const [stars, setStars] = useState(rated ?? 0);
@@ -352,7 +352,7 @@ function Done({ requestId, name, rated, title, subtitle }: { requestId: string; 
         </Txt>
       ) : null}
       <Button label="Done" onPress={goHome} style={{ alignSelf: 'stretch', marginTop: space.lg }} />
-      <Pressable onPress={() => router.push('/report')} hitSlop={8}>
+      <Pressable onPress={() => router.push({ pathname: '/report', params: { type: 'request', id: requestId, user: delivererId ?? '', name } })} hitSlop={8}>
         <Txt variant="caption" tone="muted">
           Something wrong with the item? Report it
         </Txt>

@@ -216,7 +216,7 @@ export default function Onboarding() {
               </Txt>
             </Pressable>
             <Button
-              label={busy ? 'Saving…' : 'I agree'}
+              label={busy ? 'Saving…' : 'I’m 18 or older and I agree'}
               icon="checkmark"
               disabled={busy}
               onPress={() => {

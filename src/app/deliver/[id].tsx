@@ -9,6 +9,7 @@ import { CountdownRing } from '@/components/live';
 import { Button, Card, Icon, ItemBadge, Pill, Row, Screen, StateBadge, Txt, tap, type IconName } from '@/components/ui';
 import { FULFILLMENT, money } from '@/data/pricing';
 import { attempt, showError } from '@/lib/alert';
+import { useAiPhotoConsent } from '@/lib/ai-consent';
 import { identifyPhoto, matchesItem } from '@/lib/identify';
 import { takePhoto, type Photo } from '@/lib/photo';
 import { DELIVERY_WINDOW_MS, useItem, useNow, useStore, type Job } from '@/store/app-store';
@@ -62,6 +63,15 @@ export default function Deliver() {
           </Txt>
         </Pressable>
         <Row gap={space.sm}>
+          {job.buyer ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`Report or block ${job.buyerName}`}
+              hitSlop={8}
+              onPress={() => router.push({ pathname: '/report', params: { type: 'request', id: job.id, user: job.buyer!.id, name: job.buyerName } })}>
+              <Icon name="flag-outline" size={20} tone="muted" />
+            </Pressable>
+          ) : null}
           {job.status !== 'incoming' && job.status !== 'closed' && job.status !== 'returned' ? (
             <ChatButton thread={{ requestId: job.id }} label={`Message ${job.buyerName.split(' ')[0]}`} />
           ) : null}
@@ -155,6 +165,7 @@ function SealCheck({ jobId, barcode }: { jobId: string; barcode?: string }) {
   const [checkedBy, setCheckedBy] = useState<'barcode' | 'photo' | null>(null);
   const [scannerOpen, setScannerOpen] = useState(false);
   const [checking, setChecking] = useState(false);
+  const allowAiPhotos = useAiPhotoConsent();
   const [photo, setPhoto] = useState<Photo | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -164,6 +175,10 @@ function SealCheck({ jobId, barcode }: { jobId: string; barcode?: string }) {
       setScannerOpen(false);
       // Let the scanner finish closing before the camera opens (iOS won't stack them).
       await new Promise((r) => setTimeout(r, 600));
+    }
+    if (!(await allowAiPhotos())) {
+      showError('Checking by photo uses AI, which you turned off. Scan the barcode instead.', 'Scan it');
+      return;
     }
     const p = await takePhoto({ base64: true });
     if (!p?.base64 || !item) return;

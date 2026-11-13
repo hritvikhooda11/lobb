@@ -423,6 +423,37 @@ carried?.payment_intent_id === 'pi_test_3' && carried?.payment_status === 'autho
 (await asServer(`select * from public.payments_to_settle()`)).some((x) => x.payment_intent_id === 'pi_test_3' && x.action === 'cancel') ? bad('claimed shout-out payment would be cancelled') : ok('a claimed shout-out’s payment isn’t cancelled');
 await db.exec(`update public.app_config set payments_required = false`);
 
+console.log('\nReports and blocking');
+await db.exec(`update public.requests set status = 'cancelled' where status in ('open', 'accepted', 'arriving', 'renting', 'returning')`);
+await expectOk('bri reports alex', ids.bri, `insert into public.reports (target_type, target_id, reported_user_id, reason, details) values ('user', $1, $2, 'Harassment', 'rude in chat')`, [ids.alex, ids.alex]);
+(await as(ids.bri, `select id from public.reports`)).rows.length === 1 ? ok('bri sees her own report') : bad('reporter cannot see report');
+(await as(ids.alex, `select id from public.reports`)).rows.length === 0 ? ok('alex can’t see reports about him') : bad('reports leaked');
+await expectFail('can’t file a report as someone else', ids.bri, `insert into public.reports (reporter_id, target_type, reason) values ($1, 'user', 'x y')`, [ids.dan]);
+const blockedShout = one(await as(ids.alex, `select * from public.create_shoutout('Phone case', 'buy', 'electronics', 500)`));
+(await as(ids.bri, `select id from public.shoutouts where id = $1`, [blockedShout.id])).rows.length === 1 ? ok('before blocking, bri sees alex’s shout-out') : bad('shout-out hidden before block');
+await expectOk('bri blocks alex', ids.bri, `insert into public.blocks (blocked_id) values ($1)`, [ids.alex]);
+(await as(ids.bri, `select id from public.shoutouts where id = $1`, [blockedShout.id])).rows.length === 0 ? ok('bri no longer sees alex’s shout-outs') : bad('blocked shout-out visible');
+await expectFail('bri can’t claim it', ids.bri, `select public.claim_shoutout($1)`, [blockedShout.id]);
+await expectFail('and alex can’t message bri about it', ids.alex, `insert into public.messages (shoutout_id, neighbor_id, body) values ($1, $2, 'hi')`, [blockedShout.id, ids.bri]);
+const blockedReq = one(await as(ids.alex, `select * from public.create_request('water-16', '', null, 'lobby')`));
+await db.exec(`update public.requests set created_at = now() - interval '1 minute' where id = '${blockedReq.id}'`);
+(await as(ids.bri, `select id from public.requests where id = $1`, [blockedReq.id])).rows.length === 0 ? ok('bri isn’t offered alex’s orders') : bad('blocked order visible');
+await expectFail('bri can’t accept it anyway', ids.bri, `select public.accept_request($1)`, [blockedReq.id]);
+(await as(ids.alex, `select * from public.blocks`)).rows.length === 0 ? ok('alex can’t see that he was blocked') : bad('block list leaked');
+await expectOk('bri unblocks alex', ids.bri, `delete from public.blocks where blocked_id = $1`, [ids.alex]);
+(await as(ids.bri, `select id from public.requests where id = $1`, [blockedReq.id])).rows.length === 1 ? ok('after unblocking, the order shows again') : bad('order still hidden');
+await db.exec(`update public.requests set status = 'cancelled' where id = '${blockedReq.id}'`);
+await as(ids.alex, `select public.cancel_shoutout($1)`, [blockedShout.id]);
+
+console.log('\nObjectionable-content filter');
+await expectFail('a threat in a shout-out is refused', ids.alex, `select public.create_shoutout('kill yourself', 'buy', 'snacks', 300)`, [], /language Lobb doesn’t allow/);
+await expectFail('a sexual request in a note is refused', ids.alex, `select public.create_shoutout('Phone charger', 'buy', 'electronics', 300, 'lobby', 'send nudes')`, [], /language Lobb doesn’t allow/);
+const cleanShout = one(await expectOk('normal shout-outs are fine', ids.alex, `select * from public.create_shoutout('Spicy chips', 'buy', 'snacks', 300, 'lobby', 'any brand, can you hook it up?')`));
+await expectFail('slurs in chat are refused', ids.bri, `insert into public.messages (shoutout_id, neighbor_id, body) values ($1, auth.uid(), 'you retard')`, [cleanShout.id], /language Lobb doesn’t allow/);
+await expectOk('normal chat is fine (flame retardant, raccoon, cocoa)', ids.bri, `insert into public.messages (shoutout_id, neighbor_id, body) values ($1, auth.uid(), 'I have flame retardant spray, a raccoon plush and cocoa. Shoot up to 4B!')`, [cleanShout.id]);
+await expectFail('display names are filtered too', ids.bri, `update public.profiles set name = 'porn king' where id = auth.uid()`, []);
+await as(ids.alex, `select public.cancel_shoutout($1)`, [cleanShout.id]);
+
 console.log('\nRegistered sellers');
 await db.exec(`insert into public.seller_invites (code, note) values ('LOBBTEST1', 'test')`);
 (await as(ids.bri, `select * from public.seller_invites`).catch(() => ({ rows: [] }))).rows.length === 0 ? ok('invite codes are hidden from users') : bad('invite codes readable');

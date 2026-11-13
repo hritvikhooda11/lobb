@@ -22,7 +22,7 @@ export type RequestStatus = 'pending_payment' | 'open' | 'accepted' | 'arriving'
 export const LIVE_STATUSES: RequestStatus[] = ['pending_payment', 'open', 'accepted', 'arriving', 'renting', 'returning'];
 
 /** `ratingCount` 0 = new (no ratings yet). */
-export type Person = { name: string; rating: number; ratingCount: number };
+export type Person = { id: string; name: string; rating: number; ratingCount: number };
 
 /** "★ 4.5" or "New" for someone nobody has rated yet. */
 export const ratingLabel = (p?: { rating: number; ratingCount: number }) => (p && p.ratingCount > 0 ? `★ ${p.rating.toFixed(1)}` : 'New');
@@ -113,6 +113,8 @@ export type Profile = {
   payoutsEnabled: boolean;
   /** Accepted the Terms of Use (asked once, at sign-up). */
   termsAccepted: boolean;
+  /** May item photos be sent to Anthropic's Claude? null = not asked yet. */
+  aiPhotoConsent: boolean | null;
 };
 
 /** "Anyone have a plunger?" A request for something nobody lists. */
@@ -288,7 +290,7 @@ function useAppState() {
 
   const loadProfile = useCallback(async (userId: string) => {
     const [row, home, config, payAccount] = await Promise.all([
-      must(supabase.from('profiles').select('id, name, community_id, rating_avg, rating_count, reliability_score, role, notify_shoutouts, terms_accepted_at').eq('id', userId).maybeSingle()),
+      must(supabase.from('profiles').select('id, name, community_id, rating_avg, rating_count, reliability_score, role, notify_shoutouts, terms_accepted_at, ai_photo_consent').eq('id', userId).maybeSingle()),
       must(supabase.from('home_details').select('room, birthdate').eq('user_id', userId).maybeSingle()),
       supabase.from('app_config').select('payments_required').maybeSingle(),
       supabase.from('payment_accounts').select('payouts_enabled').eq('user_id', userId).maybeSingle(),
@@ -313,6 +315,7 @@ function useAppState() {
           paymentsRequired: !!config.data?.payments_required,
           payoutsEnabled: !!payAccount.data?.payouts_enabled,
           termsAccepted: !!row.terms_accepted_at,
+          aiPhotoConsent: row.ai_photo_consent ?? null,
         }
       : null;
     stateRef.current = { ...stateRef.current, profile };
@@ -362,7 +365,7 @@ function useAppState() {
     ]);
     const roomsFor = (id: string) => (rooms ?? []).find((x) => x.request_id === id);
     const myRoom = stateRef.current.profile?.room ?? undefined;
-    const personById = new Map((people ?? []).map((p) => [p.id, { name: p.name as string, rating: Number(p.rating_avg), ratingCount: p.rating_count as number }]));
+    const personById = new Map((people ?? []).map((p) => [p.id, { id: p.id as string, name: p.name as string, rating: Number(p.rating_avg), ratingCount: p.rating_count as number }]));
     const codeFor = (id: string, purpose: string) => (codes ?? []).find((c) => c.request_id === id && c.purpose === purpose)?.code as string | undefined;
 
     const requests: Request[] = myRequests.map((r) => ({
@@ -594,6 +597,38 @@ function useAppState() {
         if (!res.ok) throw new Error(body.error ?? 'Couldn’t delete your account. Try again.');
         await unregisterRemotePush().catch(() => {});
         await supabase.auth.signOut().catch(() => {});
+      },
+      /** Report a person, listing, shout-out, chat or order to Lobb. Reviewed within 24 hours. */
+      report: async (input: { targetType: 'user' | 'item' | 'shoutout' | 'message' | 'request' | 'other'; targetId?: string; reportedUserId?: string; reason: string; details?: string }) => {
+        await must(
+          supabase.from('reports').insert({
+            target_type: input.targetType,
+            target_id: input.targetId ?? null,
+            reported_user_id: input.reportedUserId ?? null,
+            reason: input.reason,
+            details: (input.details ?? '').trim().slice(0, 1000),
+          }),
+        );
+      },
+      /** Block someone: you stop seeing each other's shout-outs and orders, and can't chat. */
+      block: async (userId: string) => {
+        await must(supabase.from('blocks').upsert({ blocked_id: userId }, { onConflict: 'blocker_id,blocked_id', ignoreDuplicates: true }));
+        await refreshAll();
+      },
+      unblock: async (userId: string) => {
+        await must(supabase.from('blocks').delete().eq('blocked_id', userId));
+        await refreshAll();
+      },
+      /** People you've blocked, with names. */
+      blockedPeople: async () => {
+        const rows = (await must(supabase.from('blocks').select('blocked_id, created_at').order('created_at', { ascending: false }))) as { blocked_id: string }[];
+        const ids = rows.map((r) => r.blocked_id);
+        const people = ids.length ? ((await must(supabase.from('profiles').select('id, name').in('id', ids))) as { id: string; name: string }[]) : [];
+        return ids.map((id) => ({ id, name: people.find((p) => p.id === id)?.name ?? 'Someone' }));
+      },
+      setAiPhotoConsent: async (allowed: boolean) => {
+        setState((s) => (s.profile ? { ...s, profile: { ...s.profile, aiPhotoConsent: allowed } } : s));
+        await must(supabase.from('profiles').update({ ai_photo_consent: allowed }).eq('id', uid()));
       },
       acceptTerms: async () => {
         await must(supabase.rpc('accept_terms'));

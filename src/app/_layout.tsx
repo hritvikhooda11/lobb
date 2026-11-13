@@ -43,6 +43,7 @@ function RootStack() {
           <Stack.Screen name="request/[id]" options={{ gestureEnabled: false }} />
           <Stack.Screen name="deliver/[id]" options={{ gestureEnabled: false }} />
           <Stack.Screen name="report" options={{ presentation: 'modal' }} />
+          <Stack.Screen name="blocked" options={{ presentation: 'modal' }} />
           <Stack.Screen name="list-item" options={{ presentation: 'modal' }} />
           <Stack.Screen name="shoutouts" options={{ presentation: 'modal' }} />
           <Stack.Screen name="shoutout-new" options={{ presentation: 'modal' }} />

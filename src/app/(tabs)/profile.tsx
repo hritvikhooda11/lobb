@@ -1,6 +1,6 @@
 import { router } from 'expo-router';
 import { useState } from 'react';
-import { Pressable, Switch, View } from 'react-native';
+import { Linking, Pressable, Switch, View } from 'react-native';
 
 import { Button, Card, Divider, Icon, Pill, Row, Screen, SectionHeader, Txt, tap } from '@/components/ui';
 import { attempt, confirm } from '@/lib/alert';
@@ -71,14 +71,45 @@ export default function Profile() {
             thumbColor="#fff"
           />
         </Row>
+        <Divider />
+        <Row style={{ justifyContent: 'space-between' }}>
+          <View style={{ flex: 1 }}>
+            <Txt>AI photo reading</Txt>
+            <Txt variant="caption" tone="muted">
+              Send item photos to Anthropic’s Claude to recognize products and prices
+            </Txt>
+          </View>
+          <Switch
+            value={user.aiPhotoConsent === true}
+            onValueChange={(on) => void attempt(() => actions.setAiPhotoConsent(on))}
+            trackColor={{ true: colors.accent, false: colors.surfaceHigh }}
+            thumbColor="#fff"
+          />
+        </Row>
       </Card>
 
       <SectionHeader title="Help" />
-      <Card onPress={() => router.push('/report')}>
-        <Row style={{ justifyContent: 'space-between' }}>
-          <Txt>Report a problem</Txt>
-          <Icon name="chevron-forward" size={18} tone="muted" />
-        </Row>
+      <Card style={{ gap: 0 }}>
+        <Pressable onPress={() => router.push('/report')}>
+          <Row style={{ justifyContent: 'space-between' }}>
+            <Txt>Report a problem</Txt>
+            <Icon name="chevron-forward" size={18} tone="muted" />
+          </Row>
+        </Pressable>
+        <Divider />
+        <Pressable onPress={() => void Linking.openURL('mailto:support@getlobb.com?subject=Lobb%20support')}>
+          <Row style={{ justifyContent: 'space-between' }}>
+            <Txt>Contact support</Txt>
+            <Txt tone="muted">support@getlobb.com</Txt>
+          </Row>
+        </Pressable>
+        <Divider />
+        <Pressable onPress={() => router.push('/blocked')}>
+          <Row style={{ justifyContent: 'space-between' }}>
+            <Txt>Blocked people</Txt>
+            <Icon name="chevron-forward" size={18} tone="muted" />
+          </Row>
+        </Pressable>
       </Card>
       <Txt variant="caption" tone="muted" style={{ marginTop: space.md }}>
         Lobb only sells factory-sealed, shelf-stable items and rents non-food items. Alcohol is 21+ only, sold by Lobb-verified sellers who check ID at the door. No tobacco, vapes, or medication.

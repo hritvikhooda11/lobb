@@ -14,6 +14,7 @@ import { canRent, categories, findByBarcode, findDuplicate, getCategory, type Ca
 import { bannedReason } from '@/data/rules';
 import { checkPrice, MAX_ADJUST_PCT, money, PRICE_MAX_PCT, PRICE_WARN_PCT, rentPerDay, sellerEarnings } from '@/data/pricing';
 import { attempt, confirm, showError } from '@/lib/alert';
+import { useAiPhotoConsent } from '@/lib/ai-consent';
 import { identifyPhoto } from '@/lib/identify';
 import { takePhoto, type Photo } from '@/lib/photo';
 import { supabase } from '@/lib/supabase';
@@ -44,6 +45,7 @@ export default function ListItem() {
   /** What the AI thinks the photo shows, waiting for the seller to confirm. */
   const [candidate, setCandidate] = useState<(Extract<IdentifyResponse, { identified: true }> & { photo: Photo }) | null>(null);
   const nameInput = useRef<ComponentRef<typeof TextInput>>(null);
+  const allowAiPhotos = useAiPhotoConsent();
   const warning = category === 'alcohol' ? null : bannedReason([name]);
 
   const duplicate = useMemo(
@@ -93,6 +95,11 @@ export default function ListItem() {
       // Let the scanner finish closing before the camera opens (iOS won't stack them).
       await new Promise((r) => setTimeout(r, 600));
     }
+    if (!(await allowAiPhotos())) {
+      showError('Photo identify uses AI, which you turned off. Type the name and add a photo instead.', 'Type it in');
+      nameInput.current?.focus();
+      return;
+    }
     const p = await takePhoto({ base64: true });
     if (!p?.base64) return;
     setIdentifying(true);
@@ -137,6 +144,8 @@ export default function ListItem() {
 
   async function getPrice() {
     if (!ready) return;
+    // The photo only goes to the AI with permission; store lookups work from the name/barcode alone.
+    const sendPhoto = !!photo?.base64 && (await allowAiPhotos());
     setPricing('loading');
     try {
       const { data } = await supabase.auth.getSession();
@@ -148,7 +157,7 @@ export default function ListItem() {
           category,
           kind,
           barcode: scan?.barcode,
-          imageBase64: photo?.base64 ?? undefined,
+          imageBase64: sendPhoto ? (photo?.base64 ?? undefined) : undefined,
           imageUrl: catalogImage ?? undefined,
         }),
       });

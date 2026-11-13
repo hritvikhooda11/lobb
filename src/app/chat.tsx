@@ -47,6 +47,8 @@ export default function Chat() {
   const otherName = request ? (request.deliverer?.name ?? 'Your neighbor') : job ? job.buyerName : shoutout ? (shoutout.mine ? (neighborName ?? 'Neighbor') : shoutout.posterName) : 'Neighbor';
   const subject = item ? item.name : shoutout ? `Shout-out: ${shoutout.text}` : '';
   const goBack = () => (router.canGoBack() ? router.back() : router.replace('/'));
+  // Who's on the other side, for Report / Block.
+  const otherId = request ? request.deliverer?.id : job ? job.buyer?.id : shoutout ? (shoutout.mine ? params.neighbor : shoutout.userId) : undefined;
 
   const rows = useMemo(() => [...messages].reverse(), [messages]);
 
@@ -88,6 +90,15 @@ export default function Chat() {
               </Txt>
             ) : null}
           </View>
+          {otherId ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`Report or block ${otherName}`}
+              hitSlop={10}
+              onPress={() => router.push({ pathname: '/report', params: { type: 'message', id: params.request ?? params.shoutout ?? '', user: otherId, name: otherName } })}>
+              <Icon name="flag-outline" size={22} tone="muted" />
+            </Pressable>
+          ) : null}
         </Row>
       </View>
 
