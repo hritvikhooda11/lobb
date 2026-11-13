@@ -28,7 +28,7 @@ function RootStack() {
     );
   }
   // Building AND room number are required, so accounts made before rooms existed are asked once.
-  const signedIn = !!state.userId && !!state.profile?.communityId && !!state.profile?.room;
+  const signedIn = !!state.userId && !!state.profile?.communityId && !!state.profile?.room && !!state.profile?.termsAccepted;
   return (
     <>
       <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.bg } }}>

@@ -111,6 +111,8 @@ export type Profile = {
   paymentsRequired: boolean;
   /** This neighbor has finished Stripe payouts setup, so they can be paid. */
   payoutsEnabled: boolean;
+  /** Accepted the Terms of Use (asked once, at sign-up). */
+  termsAccepted: boolean;
 };
 
 /** "Anyone have a plunger?" A request for something nobody lists. */
@@ -286,7 +288,7 @@ function useAppState() {
 
   const loadProfile = useCallback(async (userId: string) => {
     const [row, home, config, payAccount] = await Promise.all([
-      must(supabase.from('profiles').select('id, name, community_id, rating_avg, rating_count, reliability_score, role, notify_shoutouts').eq('id', userId).maybeSingle()),
+      must(supabase.from('profiles').select('id, name, community_id, rating_avg, rating_count, reliability_score, role, notify_shoutouts, terms_accepted_at').eq('id', userId).maybeSingle()),
       must(supabase.from('home_details').select('room, birthdate').eq('user_id', userId).maybeSingle()),
       supabase.from('app_config').select('payments_required').maybeSingle(),
       supabase.from('payment_accounts').select('payouts_enabled').eq('user_id', userId).maybeSingle(),
@@ -310,6 +312,7 @@ function useAppState() {
           alcoholEnabled: !!community?.alcohol_enabled,
           paymentsRequired: !!config.data?.payments_required,
           payoutsEnabled: !!payAccount.data?.payouts_enabled,
+          termsAccepted: !!row.terms_accepted_at,
         }
       : null;
     stateRef.current = { ...stateRef.current, profile };
@@ -591,6 +594,10 @@ function useAppState() {
         if (!res.ok) throw new Error(body.error ?? 'Couldn’t delete your account. Try again.');
         await unregisterRemotePush().catch(() => {});
         await supabase.auth.signOut().catch(() => {});
+      },
+      acceptTerms: async () => {
+        await must(supabase.rpc('accept_terms'));
+        await loadProfile(uid());
       },
       signOut: async () => {
         await unregisterRemotePush().catch(() => {});

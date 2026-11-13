@@ -5,7 +5,7 @@
  *  - Never touches /api/ or other sites (Supabase, product photos): those always go to the network.
  * Bump VERSION to drop old caches.
  */
-const VERSION = 'lobb-v1';
+const VERSION = 'lobb-v2';
 const SHELL = ['/', '/manifest.json', '/icon-192.png', '/icon-512.png', '/apple-touch-icon.png'];
 
 self.addEventListener('install', (event) => {

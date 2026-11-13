@@ -1,9 +1,12 @@
+import { router } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useState } from 'react';
 import { Keyboard, KeyboardAvoidingView, Platform, Pressable, TextInput, View } from 'react-native';
 
 import { Button, Card, Icon, Pill, Row, Screen, Txt, tap } from '@/components/ui';
+import { LegalBody } from '@/components/legal-page';
 import { communities } from '@/data/catalog';
+import { TERMS } from '@/data/terms';
 import { attempt } from '@/lib/alert';
 import { useStore } from '@/store/app-store';
 import { fonts, radius, space, useTheme } from '@/theme';
@@ -27,7 +30,8 @@ export default function Onboarding() {
   const [communityId, setCommunityId] = useState<string | null>(state.profile?.communityId ?? null);
   const [room, setRoom] = useState(state.profile?.room ?? '');
 
-  const step = state.userId ? 'community' : codeSent ? 'code' : 'email';
+  const hasHome = !!state.profile?.communityId && !!state.profile?.room;
+  const step = state.userId ? (hasHome ? 'terms' : 'community') : codeSent ? 'code' : 'email';
 
   const run = async (fn: () => Promise<unknown>) => {
     setBusy(true);
@@ -199,6 +203,26 @@ export default function Onboarding() {
                 run(() => actions.setHome(communityId!, room.trim()));
               }}
               style={{ marginTop: space.sm }}
+            />
+          </View>
+        ) : null}
+
+        {step === 'terms' ? (
+          <View style={{ gap: space.xl }}>
+            <LegalBody {...TERMS} />
+            <Pressable onPress={() => router.push('/privacy')} hitSlop={8}>
+              <Txt variant="label" tone="primary">
+                Read the Privacy Policy
+              </Txt>
+            </Pressable>
+            <Button
+              label={busy ? 'Saving…' : 'I agree'}
+              icon="checkmark"
+              disabled={busy}
+              onPress={() => {
+                tap('success');
+                run(() => actions.acceptTerms());
+              }}
             />
           </View>
         ) : null}

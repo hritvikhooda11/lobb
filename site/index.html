@@ -1,0 +1,190 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Lobb · From the neighbor down the hall</title>
+  <meta name="description" content="Lobb is the marketplace for UW students in the same building. Snacks, drinks, chargers and things to borrow, from a neighbor, at your door in minutes.">
+  <meta name="theme-color" content="#16111F">
+  <meta property="og:title" content="Lobb · From the neighbor down the hall">
+  <meta property="og:description" content="Snacks, drinks, chargers and things to borrow, from a neighbor in your building, in minutes.">
+  <meta property="og:image" content="https://getlobb.com/icon.png">
+  <link rel="icon" href="/favicon.png">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #16111F; --surface: #221B30; --surface-high: #2E2541; --border: #3D3354;
+      --text: #F5F2FF; --muted: #BDB4D6; --violet: #9B6BFF; --violet-deep: #6D3CF0; --lime: #C8FF3D; --ink: #0D0A14;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+    body { background: var(--bg); color: var(--text); font-family: Inter, -apple-system, system-ui, sans-serif; line-height: 1.55; -webkit-font-smoothing: antialiased; }
+    a { color: inherit; }
+    .wrap { max-width: 1080px; margin: 0 auto; padding: 0 24px; }
+    h1, h2, h3, .logo { font-family: 'Space Grotesk', sans-serif; letter-spacing: -0.02em; }
+
+    nav { display: flex; align-items: center; justify-content: space-between; padding: 22px 0; }
+    .logo { display: flex; align-items: center; gap: 10px; font-size: 26px; font-weight: 700; text-decoration: none; }
+    .logo img { width: 36px; height: 36px; border-radius: 9px; }
+    .dot { color: var(--lime); }
+    .nav-cta { font-weight: 600; font-size: 15px; text-decoration: none; color: var(--ink); background: var(--lime); padding: 10px 18px; border-radius: 999px; }
+
+    .hero { position: relative; padding: 64px 0 88px; display: grid; grid-template-columns: 1.15fr 0.85fr; gap: 48px; align-items: center; }
+    .hero::before { content: ''; position: absolute; inset: -120px -200px auto auto; width: 620px; height: 620px; background: radial-gradient(circle, rgba(155,107,255,0.35), transparent 65%); z-index: -1; }
+    .badge { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; color: var(--lime); background: rgba(200,255,61,0.12); padding: 6px 12px; border-radius: 999px; margin-bottom: 22px; }
+    .badge::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: var(--lime); }
+    h1 { font-size: clamp(44px, 7vw, 76px); line-height: 1.02; font-weight: 700; }
+    h1 em { font-style: normal; color: var(--violet); }
+    .lede { margin-top: 22px; font-size: 19px; color: var(--muted); max-width: 520px; }
+    .ctas { margin-top: 34px; display: flex; gap: 12px; flex-wrap: wrap; }
+    .btn { display: inline-flex; align-items: center; gap: 10px; padding: 15px 24px; border-radius: 16px; font-weight: 600; font-size: 16px; text-decoration: none; transition: transform .15s ease; }
+    .btn:hover { transform: translateY(-2px); }
+    .btn-primary { background: var(--violet-deep); color: #fff; box-shadow: 0 10px 30px rgba(109,60,240,0.45); }
+    .btn-ghost { background: var(--surface-high); color: var(--text); }
+    .fine { margin-top: 14px; font-size: 13px; color: var(--muted); }
+
+    .phone { justify-self: center; width: 290px; border-radius: 44px; padding: 14px; background: linear-gradient(160deg, #3a2d58, #1b1428); box-shadow: 0 40px 80px rgba(0,0,0,0.5), inset 0 0 0 1px rgba(255,255,255,0.08); transform: rotate(3deg); }
+    .screen { border-radius: 32px; background: var(--bg); padding: 22px 16px; min-height: 520px; display: flex; flex-direction: column; gap: 12px; }
+    .screen .top { font-size: 12px; color: var(--muted); }
+    .screen .bld { font-family: 'Space Grotesk'; font-size: 18px; font-weight: 700; }
+    .banner { border-radius: 18px; padding: 16px; background: linear-gradient(135deg, #8B5CF6, #FF5DA2); }
+    .banner b { font-family: 'Space Grotesk'; display: block; font-size: 15px; }
+    .banner span { font-size: 12px; opacity: .9; }
+    .tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .tile { border-radius: 14px; background: var(--surface); padding: 12px; border: 1px solid var(--border); }
+    .tile .emoji { font-size: 28px; }
+    .tile .price { font-family: 'Space Grotesk'; font-weight: 700; margin-top: 6px; }
+    .tile .name { font-size: 12px; color: var(--muted); }
+    .eta { display: inline-block; font-size: 10px; font-weight: 700; color: var(--lime); background: rgba(0,0,0,.4); padding: 2px 6px; border-radius: 999px; }
+    .live { margin-top: auto; border-radius: 16px; background: var(--violet-deep); padding: 14px; font-size: 13px; font-weight: 600; }
+
+    section { padding: 72px 0; }
+    .eyebrow { color: var(--lime); font-weight: 600; font-size: 14px; letter-spacing: .04em; text-transform: uppercase; }
+    h2 { font-size: clamp(30px, 4.4vw, 44px); margin-top: 10px; line-height: 1.1; }
+    .steps { margin-top: 40px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
+    .card { background: var(--surface); border: 1px solid var(--border); border-radius: 22px; padding: 26px; }
+    .num { width: 38px; height: 38px; border-radius: 12px; background: rgba(155,107,255,.2); color: var(--violet); font-family: 'Space Grotesk'; font-weight: 700; display: grid; place-items: center; }
+    .card h3 { margin-top: 16px; font-size: 21px; }
+    .card p { margin-top: 8px; color: var(--muted); font-size: 15px; }
+
+    .split { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-top: 40px; }
+    .earn { background: linear-gradient(135deg, rgba(200,255,61,.14), rgba(200,255,61,.03)); border-color: rgba(200,255,61,.3); }
+    .earn .big { font-family: 'Space Grotesk'; font-size: 40px; font-weight: 700; color: var(--lime); }
+    ul.checks { list-style: none; margin-top: 14px; display: grid; gap: 10px; }
+    ul.checks li { padding-left: 28px; position: relative; color: var(--muted); }
+    ul.checks li::before { content: '✓'; position: absolute; left: 0; color: var(--lime); font-weight: 700; }
+
+    .final { text-align: center; background: radial-gradient(ellipse at center, rgba(155,107,255,.25), transparent 70%); }
+    .final p { color: var(--muted); margin-top: 12px; font-size: 17px; }
+    .final .ctas { justify-content: center; }
+
+    footer { border-top: 1px solid var(--border); padding: 28px 0 40px; color: var(--muted); font-size: 14px; }
+    footer .wrap { display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+    footer a { color: var(--muted); margin-left: 18px; text-decoration: none; }
+    footer a:hover { color: var(--text); }
+
+    @media (max-width: 860px) {
+      .hero { grid-template-columns: 1fr; padding: 32px 0 56px; }
+      .phone { transform: none; width: 270px; }
+      .steps, .split { grid-template-columns: 1fr; }
+      section { padding: 52px 0; }
+      footer a { margin: 0 16px 0 0; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <nav>
+      <a class="logo" href="/"><img src="/icon.png" alt=""><span>lobb<span class="dot">.</span></span></a>
+      <a class="nav-cta" href="https://testflight.apple.com/join/VEHxsRHq">Join the beta</a>
+    </nav>
+
+    <header class="hero">
+      <div>
+        <span class="badge">Now in beta for UW housing</span>
+        <h1>From the neighbor <em>down the hall.</em></h1>
+        <p class="lede">Snacks, drinks, chargers, toiletries, and things to borrow, from someone in your building. At your door or in the lobby in minutes, for close to store prices.</p>
+        <div class="ctas">
+          <a class="btn btn-primary" href="https://testflight.apple.com/join/VEHxsRHq">Get it on iPhone</a>
+          <a class="btn btn-ghost" href="https://lobb.expo.app">Open in your browser</a>
+        </div>
+        <p class="fine">Free to join with your @uw.edu email.</p>
+      </div>
+      <div class="phone" aria-hidden="true">
+        <div class="screen">
+          <div class="top">Delivering to</div>
+          <div class="bld">The Standard</div>
+          <div class="banner"><b>Can’t find it? Shout it out</b><span>Ask your building for anything</span></div>
+          <div class="tiles">
+            <div class="tile"><span class="eta">⚡ 6 min</span><div class="emoji">🥤</div><div class="price">$3.25</div><div class="name">Coca-Cola</div></div>
+            <div class="tile"><span class="eta">⚡ 8 min</span><div class="emoji">🍜</div><div class="price">$3.10</div><div class="name">Cup Noodles</div></div>
+            <div class="tile"><span class="eta">⚡ 5 min</span><div class="emoji">🔌</div><div class="price">$13.00</div><div class="name">Charger</div></div>
+            <div class="tile"><span class="eta">⚡ 9 min</span><div class="emoji">🧮</div><div class="price">$12/day</div><div class="name">TI-84, borrow</div></div>
+          </div>
+          <div class="live">🛋️ Maya is in the lobby with your order</div>
+        </div>
+      </div>
+    </header>
+  </div>
+
+  <section>
+    <div class="wrap">
+      <span class="eyebrow">How it works</span>
+      <h2>Order from your building, not a warehouse.</h2>
+      <div class="steps">
+        <div class="card"><div class="num">1</div><h3>Pick it</h3><p>See what neighbors in your building have right now, or shout out for anything that isn’t listed.</p></div>
+        <div class="card"><div class="num">2</div><h3>A neighbor brings it</h3><p>Door drop-off, lobby meetup, or pickup. Chat with them and get a heads-up when they’re there.</p></div>
+        <div class="card"><div class="num">3</div><h3>Scan and done</h3><p>Show your QR code at the handoff. Your card is only charged when the item is in your hands.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="wrap">
+      <span class="eyebrow">Two ways to use Lobb</span>
+      <h2>Need something? Have something?</h2>
+      <div class="split">
+        <div class="card">
+          <h3>When you need it</h3>
+          <ul class="checks">
+            <li>Sealed snacks, drinks, instant food and toiletries</li>
+            <li>Borrow chargers, calculators, umbrellas and more</li>
+            <li>Prices set from real store prices</li>
+            <li>Only verified UW students in your building</li>
+          </ul>
+        </div>
+        <div class="card earn">
+          <h3>When you have it</h3>
+          <div class="big">Earn on every handoff</div>
+          <ul class="checks">
+            <li>List what’s already in your room in seconds: scan a barcode or snap a photo</li>
+            <li>Get paid back plus a delivery fee, straight to your bank</li>
+            <li>Lend things out and get them back, with a deposit hold</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="final">
+    <div class="wrap">
+      <h2>Your building is a store now.</h2>
+      <p>Join the beta and be one of the first in your building.</p>
+      <div class="ctas">
+        <a class="btn btn-primary" href="https://testflight.apple.com/join/VEHxsRHq">Get it on iPhone</a>
+        <a class="btn btn-ghost" href="https://lobb.expo.app">Open in your browser</a>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <div class="wrap">
+      <span>© 2026 Lobb · Made at UW</span>
+      <span><a href="https://lobb.expo.app/privacy">Privacy</a><a href="https://lobb.expo.app/terms">Terms</a><a href="mailto:support@getlobb.com">support@getlobb.com</a></span>
+    </div>
+  </footer>
+</body>
+</html>
