@@ -105,7 +105,7 @@ export const communities: Community[] = [
   { id: 'west-campus', name: 'West Campus Dorms', type: 'dorm' },
   { id: 'north-campus', name: 'North Campus Dorms', type: 'dorm' },
   { id: 'm-housing', name: 'M Housing', type: 'apartment' },
-  { id: 'lobb-review', name: 'Lobb Review House', type: 'apartment', hidden: true },
+  { id: 'lobb-review', name: 'Maple Hall', type: 'apartment', hidden: true },
 ];
 
 const normalize = (s: string) =>
