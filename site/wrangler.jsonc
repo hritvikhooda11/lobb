@@ -1,0 +1,11 @@
+{
+  // getlobb.com: the one-page Lobb site, served as static files by Cloudflare.
+  // Deploy: cd site && npx wrangler@4 deploy
+  "name": "getlobb",
+  "compatibility_date": "2026-11-10",
+  "assets": { "directory": "./public" },
+  "routes": [
+    { "pattern": "getlobb.com", "custom_domain": true },
+    { "pattern": "www.getlobb.com", "custom_domain": true }
+  ]
+}
