@@ -35,8 +35,6 @@ function RootStack() {
         <Stack.Protected guard={!signedIn}>
           <Stack.Screen name="onboarding" />
         </Stack.Protected>
-        <Stack.Screen name="privacy" />
-        <Stack.Screen name="terms" />
         <Stack.Protected guard={signedIn} redirectTo="/onboarding">
           <Stack.Screen name="(tabs)" />
           <Stack.Screen name="item/[id]" options={{ presentation: 'formSheet', sheetAllowedDetents: [0.72, 1], sheetGrabberVisible: true, sheetCornerRadius: 28 }} />
@@ -51,6 +49,9 @@ function RootStack() {
           <Stack.Screen name="seller-code" options={{ presentation: 'formSheet', sheetAllowedDetents: [0.5], sheetGrabberVisible: true, sheetCornerRadius: 28 }} />
           <Stack.Screen name="chat" />
         </Stack.Protected>
+        {/* Last, so when sign-in finishes the stack falls back to the tabs, never to a legal page. */}
+        <Stack.Screen name="privacy" />
+        <Stack.Screen name="terms" />
       </Stack>
       {signedIn ? <SellerAlerts /> : null}
       {signedIn ? <ShoutoutAlerts /> : null}
