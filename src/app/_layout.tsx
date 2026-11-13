@@ -37,7 +37,7 @@ function RootStack() {
         </Stack.Protected>
         <Stack.Screen name="privacy" />
         <Stack.Screen name="terms" />
-        <Stack.Protected guard={signedIn}>
+        <Stack.Protected guard={signedIn} redirectTo="/onboarding">
           <Stack.Screen name="(tabs)" />
           <Stack.Screen name="item/[id]" options={{ presentation: 'formSheet', sheetAllowedDetents: [0.72, 1], sheetGrabberVisible: true, sheetCornerRadius: 28 }} />
           <Stack.Screen name="request/[id]" options={{ gestureEnabled: false }} />

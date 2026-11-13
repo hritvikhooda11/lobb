@@ -162,7 +162,7 @@ export default function Onboarding() {
             <Txt variant="body" tone="muted">
               Requests only go to neighbors in your building.
             </Txt>
-            {communities.map((c) => {
+            {communities.filter((c) => !c.hidden || c.id === communityId).map((c) => {
               const selected = c.id === communityId;
               return (
                 <Card key={c.id} highlight={selected} onPress={() => setCommunityId(c.id)} style={selected && { backgroundColor: colors.primarySoft }}>

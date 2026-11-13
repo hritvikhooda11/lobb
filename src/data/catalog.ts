@@ -97,13 +97,15 @@ export const catalog: Item[] = [
 /** The bundled photo/emoji for a seeded catalog item (the database stores everything else). */
 export const bundledItem = (id: string) => catalog.find((i) => i.id === id);
 
-export type Community = { id: string; name: string; type: 'dorm' | 'high-rise' | 'apartment' };
+/** `hidden`: not offered at sign-up (Lobb's App Review building). */
+export type Community = { id: string; name: string; type: 'dorm' | 'high-rise' | 'apartment'; hidden?: boolean };
 
 export const communities: Community[] = [
   { id: 'standard', name: 'The Standard', type: 'high-rise' },
   { id: 'west-campus', name: 'West Campus Dorms', type: 'dorm' },
   { id: 'north-campus', name: 'North Campus Dorms', type: 'dorm' },
   { id: 'm-housing', name: 'M Housing', type: 'apartment' },
+  { id: 'lobb-review', name: 'Lobb Review House', type: 'apartment', hidden: true },
 ];
 
 const normalize = (s: string) =>
