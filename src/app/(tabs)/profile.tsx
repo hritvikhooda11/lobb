@@ -112,7 +112,7 @@ export default function Profile() {
         </Pressable>
       </Card>
       <Txt variant="caption" tone="muted" style={{ marginTop: space.md }}>
-        Lobb only sells factory-sealed, shelf-stable items and rents non-food items. Alcohol is 21+ only, sold by Lobb-verified sellers who check ID at the door. No tobacco, vapes, or medication.
+        Lobb only sells factory-sealed, shelf-stable items and rents non-food items. No alcohol, tobacco, vapes, or medication.
       </Txt>
 
 
